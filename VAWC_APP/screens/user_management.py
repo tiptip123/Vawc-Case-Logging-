@@ -2,13 +2,16 @@ import customtkinter as ctk
 from tkinter import ttk, messagebox
 from db import get_connection
 import bcrypt
-from .screen_header import ScreenHeader
 
 class UserManagementFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color="#f5f5f5")
+        self.setup_ui()
 
-        ScreenHeader(self, "User Management").pack(fill="x")
+    def setup_ui(self):
+        # Clear existing widgets if any
+        for widget in self.winfo_children():
+            widget.destroy()
 
         # Load user statistics
         self.load_user_stats()
@@ -134,6 +137,10 @@ class UserManagementFrame(ctk.CTkFrame):
         )
         self.btn_delete.pack(side="right", padx=(10, 0), pady=5)
 
+    def refresh(self):
+        """Refresh user management data and UI"""
+        self.setup_ui()
+
     def load_user_stats(self):
         try:
             connection = get_connection()
@@ -202,7 +209,7 @@ class UserManagementFrame(ctk.CTkFrame):
             connection.commit()
             cursor.close()
             connection.close()
-            self.load_users()
+            self.refresh()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -219,7 +226,7 @@ class UserManagementFrame(ctk.CTkFrame):
                 connection.commit()
                 cursor.close()
                 connection.close()
-                self.load_users()
+                self.refresh()
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 

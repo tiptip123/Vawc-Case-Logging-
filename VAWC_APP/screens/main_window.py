@@ -1,9 +1,12 @@
 import customtkinter as ctk
 from tkinter import ttk
+import os
+from PIL import Image
 from .dashboard import DashboardFrame
 from .logs_tab import LogsTabFrame
 from .add_record import AddRecordWindow
 from .reports import ReportsFrame
+from .analytics import AnalyticsFrame
 from .user_management import UserManagementFrame
 
 class MainWindow(ctk.CTk):
@@ -16,6 +19,7 @@ class MainWindow(ctk.CTk):
         self.minsize(1100, 680)
         self.fullscreen = True
         self.attributes("-fullscreen", True)
+        self.bind("<F8>", lambda e: self.toggle_fullscreen())
 
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
@@ -26,25 +30,32 @@ class MainWindow(ctk.CTk):
         self.title_bar.grid_columnconfigure(0, weight=1)
         self.title_bar.grid_rowconfigure(0, weight=1)
 
+        # Logo and Title Container
+        title_container = ctk.CTkFrame(self.title_bar, fg_color="#1a2a4a")
+        title_container.grid(row=0, column=0, padx=20, pady=10, sticky="w")
+
+        # Add Logo
+        logo_path = os.path.join(os.getcwd(), "logo", "tankulan.jpg")
+        if os.path.exists(logo_path):
+            try:
+                logo_image = ctk.CTkImage(
+                    light_image=Image.open(logo_path),
+                    dark_image=Image.open(logo_path),
+                    size=(50, 50)
+                )
+                self.logo_label = ctk.CTkLabel(title_container, image=logo_image, text="")
+                self.logo_label.pack(side="left", padx=(0, 15))
+            except Exception as e:
+                print(f"Error loading logo: {e}")
+
         ctk.CTkLabel(
-            self.title_bar,
+            title_container,
             text="VAWC Case Logging System - Barangay Tankulan, Manolo Fortich, Bukidnon",
             font=("Arial", 16, "bold"),
             text_color="white",
-            wraplength=900,
+            wraplength=800,
             justify="left"
-        ).grid(row=0, column=0, padx=20, pady=10, sticky="w")
-
-        button_frame = ctk.CTkFrame(self.title_bar, fg_color="#1a2a4a")
-        button_frame.grid(row=0, column=1, padx=10, pady=10, sticky="e")
-
-        btn_config = {"width":40, "height":30, "corner_radius":10, "text_color":"white", "font":("Arial", 12, "bold")}
-        self.btn_minimize = ctk.CTkButton(button_frame, text="—", command=self.iconify, fg_color="#3b5d7a", hover_color="#25597a", **btn_config)
-        self.btn_minimize.pack(side="left", padx=3)
-        self.btn_toggle = ctk.CTkButton(button_frame, text="🗖", command=self.toggle_fullscreen, fg_color="#3b5d7a", hover_color="#25597a", **btn_config)
-        self.btn_toggle.pack(side="left", padx=3)
-        self.btn_close = ctk.CTkButton(button_frame, text="✕", command=self.close_app, fg_color="#b30000", hover_color="#8b0000", **btn_config)
-        self.btn_close.pack(side="left", padx=3)
+        ).pack(side="left")
 
         # Sidebar
         self.sidebar = ctk.CTkFrame(self, width=220, fg_color="#1a2a4a")
@@ -78,11 +89,13 @@ class MainWindow(ctk.CTk):
         self.content = ctk.CTkFrame(self, fg_color="#f5f5f5")
         self.content.grid(row=1, column=1, sticky="nsew")
 
+        self.current_frame = None
         self.show_dashboard()
 
     def clear_content(self):
         for widget in self.content.winfo_children():
             widget.destroy()
+        self.current_frame = None
 
     def set_active_button(self, active_button):
         for button in self.sidebar_buttons:
@@ -91,17 +104,23 @@ class MainWindow(ctk.CTk):
 
     def show_dashboard(self):
         self.clear_content()
-        DashboardFrame(self.content).pack(fill="both", expand=True)
+        self.current_frame = DashboardFrame(self.content)
+        self.current_frame.pack(fill="both", expand=True)
         self.set_active_button(self.btn_dashboard)
 
     def show_logs(self):
         self.clear_content()
-        LogsTabFrame(self.content, self.user_role).pack(fill="both", expand=True)
+        self.current_frame = LogsTabFrame(self.content, self.user_role)
+        self.current_frame.pack(fill="both", expand=True)
         self.set_active_button(self.btn_logs)
 
     def show_add_record(self):
-        AddRecordWindow(self)
+        AddRecordWindow(self, on_save=self.refresh_current_view)
         self.set_active_button(self.btn_add)
+
+    def refresh_current_view(self):
+        if self.current_frame and hasattr(self.current_frame, 'refresh'):
+            self.current_frame.refresh()
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
@@ -115,12 +134,20 @@ class MainWindow(ctk.CTk):
 
     def show_reports(self):
         self.clear_content()
-        ReportsFrame(self.content).pack(fill="both", expand=True)
+        self.current_frame = ReportsFrame(self.content)
+        self.current_frame.pack(fill="both", expand=True)
+        self.set_active_button(self.btn_reports)
+
+    def show_analytics(self):
+        self.clear_content()
+        self.current_frame = AnalyticsFrame(self.content)
+        self.current_frame.pack(fill="both", expand=True)
         self.set_active_button(self.btn_reports)
 
     def show_user_management(self):
         self.clear_content()
-        UserManagementFrame(self.content).pack(fill="both", expand=True)
+        self.current_frame = UserManagementFrame(self.content)
+        self.current_frame.pack(fill="both", expand=True)
         self.set_active_button(self.btn_users)
 
     def logout(self):

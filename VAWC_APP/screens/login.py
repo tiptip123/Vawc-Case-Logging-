@@ -1,5 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
+import os
+from PIL import Image
 from auth import verify_login
 from .main_window import MainWindow
 
@@ -13,7 +15,21 @@ class LoginScreen(ctk.CTk):
 
         header_frame = ctk.CTkFrame(self, fg_color="#1a2a4a")
         header_frame.pack(fill="x")
-        ctk.CTkLabel(header_frame, text="VAWC Case Logging System", font=("Arial", 18, "bold"), text_color="white").pack(padx=20, pady=20)
+
+        # Logo in Login Header
+        logo_path = os.path.join(os.getcwd(), "logo", "tankulan.jpg")
+        if os.path.exists(logo_path):
+            try:
+                logo_image = ctk.CTkImage(
+                    light_image=Image.open(logo_path),
+                    dark_image=Image.open(logo_path),
+                    size=(40, 40)
+                )
+                ctk.CTkLabel(header_frame, image=logo_image, text="").pack(side="left", padx=(20, 0), pady=10)
+            except Exception:
+                pass
+
+        ctk.CTkLabel(header_frame, text="VAWC Case Logging System", font=("Arial", 18, "bold"), text_color="white").pack(padx=20, pady=20, side="left")
 
         form_frame = ctk.CTkFrame(self, fg_color="#eef0f4")
         form_frame.pack(fill="both", expand=True, padx=20, pady=10)

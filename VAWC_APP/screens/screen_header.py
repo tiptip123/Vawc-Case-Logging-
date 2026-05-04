@@ -1,13 +1,30 @@
 import customtkinter as ctk
+import os
+from PIL import Image
 
 class ScreenHeader(ctk.CTkFrame):
     def __init__(self, parent, title, actions=None):
         super().__init__(parent, fg_color="#f5f5f5")
         self.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self, text=title, font=("Arial", 22, "bold"), text_color="#1a2a4a").grid(
-            row=0, column=0, sticky="w", padx=20, pady=(20, 10)
-        )
+        header_container = ctk.CTkFrame(self, fg_color="#f5f5f5")
+        header_container.grid(row=0, column=0, sticky="w", padx=20, pady=(20, 10))
+
+        # Add Logo
+        logo_path = os.path.join(os.getcwd(), "logo", "tankulan.jpg")
+        if os.path.exists(logo_path):
+            try:
+                logo_image = ctk.CTkImage(
+                    light_image=Image.open(logo_path),
+                    dark_image=Image.open(logo_path),
+                    size=(40, 40)
+                )
+                self.logo_label = ctk.CTkLabel(header_container, image=logo_image, text="")
+                self.logo_label.pack(side="left", padx=(0, 10))
+            except Exception:
+                pass
+
+        ctk.CTkLabel(header_container, text=title, font=("Arial", 22, "bold"), text_color="#1a2a4a").pack(side="left")
 
         if actions:
             action_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")

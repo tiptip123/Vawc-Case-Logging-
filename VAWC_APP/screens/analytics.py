@@ -10,6 +10,13 @@ class AnalyticsFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color="#f5f5f5")
         self.parent = parent
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Clear existing widgets if any
+        for widget in self.winfo_children():
+            widget.destroy()
+
         self.load_data()
 
         ScreenHeader(self, "Analytics & Charts", actions=[
@@ -148,10 +155,18 @@ class AnalyticsFrame(ctk.CTkFrame):
             ctk.CTkLabel(line_card, text="No historical data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
 
     def back_to_reports(self):
-        # Destroy analytics and recreate reports
-        from .reports import ReportsFrame
-        self.destroy()
-        ReportsFrame(self.parent).pack(fill="both", expand=True)
+        # Use main window to show reports so it's tracked as current_frame
+        if hasattr(self.master.master, 'show_reports'):
+            self.master.master.show_reports()
+        else:
+            # Fallback
+            from .reports import ReportsFrame
+            self.destroy()
+            ReportsFrame(self.parent).pack(fill="both", expand=True)
+
+    def refresh(self):
+        """Refresh analytics data and charts"""
+        self.setup_ui()
 
     def load_data(self):
         try:

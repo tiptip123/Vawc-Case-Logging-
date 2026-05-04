@@ -7,8 +7,9 @@ from db import get_connection
 from utils.helpers import calculate_age
 
 class EditRecordWindow(ctk.CTkToplevel):
-    def __init__(self, parent, vawc_no):
+    def __init__(self, parent, vawc_no, on_save=None):
         super().__init__(parent)
+        self.on_save = on_save
         self.title("Edit Record")
         self.attributes("-fullscreen", True)  # Always full screen
         self.configure(fg_color="#f5f5f5")
@@ -161,6 +162,8 @@ class EditRecordWindow(ctk.CTkToplevel):
             cursor.close()
             connection.close()
             messagebox.showinfo("Success", "Record updated.")
+            if self.on_save:
+                self.on_save()
             self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))

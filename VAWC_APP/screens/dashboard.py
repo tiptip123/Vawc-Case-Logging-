@@ -7,9 +7,14 @@ from .screen_header import ScreenHeader
 class DashboardFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color="#f5f5f5")
-        self.load_data()
+        self.setup_ui()
 
-        ScreenHeader(self, "Dashboard").pack(fill="x")
+    def setup_ui(self):
+        # Clear existing widgets if any
+        for widget in self.winfo_children():
+            widget.destroy()
+
+        self.load_data()
 
         # Welcome Section
         welcome_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
@@ -227,3 +232,8 @@ class DashboardFrame(ctk.CTkFrame):
             self.year_cases = 0
             self.recent_entries = []
             self.abuse_counts = {}
+            self.status_counts = {}
+
+    def refresh(self):
+        """Refresh the dashboard data and UI"""
+        self.setup_ui()

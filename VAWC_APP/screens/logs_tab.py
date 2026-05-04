@@ -4,7 +4,6 @@ from tkcalendar import DateEntry
 from db import get_connection
 from .view_record import ViewRecordWindow
 from .edit_record import EditRecordWindow
-from .screen_header import ScreenHeader
 
 class LogsTabFrame(ctk.CTkFrame):
     def __init__(self, parent, user_role):
@@ -18,8 +17,6 @@ class LogsTabFrame(ctk.CTkFrame):
         self.filter_status = ""
         self.filter_year = ""
         self.filter_month = ""
-
-        ScreenHeader(self, "VAWC Logs").pack(fill="x")
 
         # ================= FILTER SECTION =================
         filter_frame = ctk.CTkFrame(self, fg_color="#eef0f4")
@@ -199,9 +196,13 @@ class LogsTabFrame(ctk.CTkFrame):
         self.page += 1
         self.load_data()
 
+    def refresh(self):
+        """Refresh the logs data"""
+        self.load_data()
+
     def on_double_click(self, event):
         selected = self.tree.selection()
         if selected:
             item = selected[0]
             values = self.tree.item(item, "values")
-            ViewRecordWindow(self, values[0])
+            ViewRecordWindow(self, values[0], on_edit_saved=self.refresh)

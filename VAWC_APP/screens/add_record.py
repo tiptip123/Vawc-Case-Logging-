@@ -8,8 +8,9 @@ from vawc_number import generate_vawc_number
 from utils.helpers import calculate_age
 
 class AddRecordWindow(ctk.CTkToplevel):
-    def __init__(self, parent):
+    def __init__(self, parent, on_save=None):
         super().__init__(parent)
+        self.on_save = on_save
         self.title("Add Record")
         self.attributes("-fullscreen", True)  # Always full screen
         self.configure(fg_color="#f5f5f5")
@@ -148,6 +149,8 @@ class AddRecordWindow(ctk.CTkToplevel):
             cursor.close()
             connection.close()
             messagebox.showinfo("Success", f"Record saved with VAWC No: {vawc_no}")
+            if self.on_save:
+                self.on_save()
             self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))

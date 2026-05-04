@@ -5,13 +5,10 @@ from utils.pdf_export import export_full_pdf, export_filtered_pdf
 from utils.excel_export import export_to_excel
 from utils.db_backup import backup_database, restore_database
 from .analytics import AnalyticsFrame
-from .screen_header import ScreenHeader
 
 class ReportsFrame(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color="#f5f5f5")
-
-        ScreenHeader(self, "Reports").pack(fill="x")
 
         # Main container for cards
         cards_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
@@ -95,11 +92,20 @@ class ReportsFrame(ctk.CTkFrame):
             if input_path:
                 restore_database(input_path)
                 messagebox.showinfo("Success", "Database restored successfully")
+                self.refresh()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def refresh(self):
+        """Refresh reports view (if needed)"""
+        pass
+
     def show_analytics(self):
-        # Clear current content and show analytics
-        parent_container = self.master
-        self.destroy()
-        AnalyticsFrame(parent_container).pack(fill="both", expand=True)
+        # Use main window to show analytics so it's tracked as current_frame
+        if hasattr(self.master.master, 'show_analytics'):
+            self.master.master.show_analytics()
+        else:
+            # Fallback
+            parent_container = self.master
+            self.destroy()
+            AnalyticsFrame(parent_container).pack(fill="both", expand=True)
