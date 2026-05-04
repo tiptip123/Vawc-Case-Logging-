@@ -14,7 +14,7 @@ Data Storage:
 
 Default Login Credentials:
 - Username: admin
-- Password: Admin@1234
+- Password: Admin@1234/admin
 
 Troubleshooting:
 - If "Module not found" error: Run install.bat again.
