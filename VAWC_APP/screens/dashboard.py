@@ -1,7 +1,9 @@
 import customtkinter as ctk
 from tkinter import ttk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from db import get_connection
-from datetime import datetime
+from datetime import datetime, timedelta
 from .screen_header import ScreenHeader
 
 class DashboardFrame(ctk.CTkFrame):
@@ -10,18 +12,20 @@ class DashboardFrame(ctk.CTkFrame):
         self.setup_ui()
 
     def setup_ui(self):
-        # Clear existing widgets if any
+        # Clear existing widgets and close matplotlib figures to prevent memory leaks
+        plt.close('all')
         for widget in self.winfo_children():
             widget.destroy()
 
         self.load_data()
 
-        # Welcome Section
-        welcome_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
-        welcome_frame.pack(fill="x", padx=20, pady=(10, 5))
+        # Use a scrollable frame for the dashboard to be responsive
+        self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="#f5f5f5")
+        self.scroll_container.pack(fill="both", expand=True)
 
-        welcome_card = ctk.CTkFrame(welcome_frame, fg_color="white", corner_radius=10)
-        welcome_card.pack(fill="x", pady=5)
+        # Welcome Section
+        welcome_card = ctk.CTkFrame(self.scroll_container, fg_color="white", corner_radius=10)
+        welcome_card.pack(fill="x", padx=20, pady=(15, 10))
 
         ctk.CTkLabel(
             welcome_card,
@@ -34,206 +38,215 @@ class DashboardFrame(ctk.CTkFrame):
         ctk.CTkLabel(welcome_card, text=f"Welcome back! Today is {datetime.now().strftime('%B %d, %Y')}", font=("Arial", 12), text_color="#666666").pack(pady=(0, 15))
 
         # Primary Statistics Cards
-        stats_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
-        stats_frame.pack(fill="x", padx=20, pady=(5, 5))
-        stats_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        stats_frame = ctk.CTkFrame(self.scroll_container, fg_color="#f5f5f5")
+        stats_frame.pack(fill="x", padx=15, pady=5)
+        stats_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         # Total Records Card
-        self.card_total = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
-        self.card_total.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(self.card_total, text="📊 Total Cases", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
-        ctk.CTkLabel(self.card_total, text=str(self.total_records), font=("Arial", 28, "bold"), text_color="#8b0000").pack(pady=(0, 5))
-        ctk.CTkLabel(self.card_total, text="All time records", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
+        total_cases = sum(self.status_counts.values())
+        total_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
+        total_card.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+        ctk.CTkLabel(total_card, text="📊 Total Cases", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
+        ctk.CTkLabel(total_card, text=str(total_cases), font=("Arial", 26, "bold"), text_color="#8b0000").pack(pady=(0, 5))
+        ctk.CTkLabel(total_card, text="All time records", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
 
         # This Month Card
-        self.card_month = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
-        self.card_month.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(self.card_month, text="📅 This Month", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
-        ctk.CTkLabel(self.card_month, text=str(self.month_cases), font=("Arial", 28, "bold"), text_color="#1a73e8").pack(pady=(0, 5))
-        month_name = datetime.now().strftime("%B")
-        ctk.CTkLabel(self.card_month, text=f"Cases in {month_name}", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
+        month_cases = self.monthly_counts.get(datetime.now().strftime('%Y-%m'), 0)
+        month_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
+        month_card.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+        ctk.CTkLabel(month_card, text="📅 This Month", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
+        ctk.CTkLabel(month_card, text=str(month_cases), font=("Arial", 26, "bold"), text_color="#1a73e8").pack(pady=(0, 5))
+        ctk.CTkLabel(month_card, text=f"Cases in {datetime.now().strftime('%B')}", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
 
         # This Year Card
-        self.card_year = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
-        self.card_year.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(self.card_year, text="📈 This Year", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
-        ctk.CTkLabel(self.card_year, text=str(self.year_cases), font=("Arial", 28, "bold"), text_color="#28a745").pack(pady=(0, 5))
-        year = datetime.now().year
-        ctk.CTkLabel(self.card_year, text=f"Cases in {year}", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
+        year_prefix = datetime.now().strftime('%Y-')
+        year_cases = sum(count for month, count in self.monthly_counts.items() if month.startswith(year_prefix))
+        year_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
+        year_card.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
+        ctk.CTkLabel(year_card, text="📈 This Year", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
+        ctk.CTkLabel(year_card, text=str(year_cases), font=("Arial", 26, "bold"), text_color="#28a745").pack(pady=(0, 5))
+        ctk.CTkLabel(year_card, text=f"Cases in {datetime.now().year}", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
 
-        # Case Status Overview
-        status_overview_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
-        status_overview_frame.pack(fill="x", padx=20, pady=(5, 5))
-        status_overview_frame.grid_columnconfigure(0, weight=1)
+        # Ongoing Cases Card
+        ongoing = self.status_counts.get('Ongoing', 0)
+        ongoing_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
+        ongoing_card.grid(row=0, column=3, padx=5, pady=5, sticky="nsew")
+        ctk.CTkLabel(ongoing_card, text="⏳ Ongoing", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
+        ctk.CTkLabel(ongoing_card, text=str(ongoing), font=("Arial", 26, "bold"), text_color="#ffc107").pack(pady=(0, 5))
+        ctk.CTkLabel(ongoing_card, text="Pending action", font=("Arial", 10), text_color="#666666").pack(pady=(0, 15))
 
-        # Case Status Summary Card (now full width)
-        status_card = ctk.CTkFrame(status_overview_frame, fg_color="white", corner_radius=10)
-        status_card.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+        # Top 3 Abuse Types & Hotspots (Advanced Analytics)
+        analytics_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
+        analytics_frame.pack(fill="x", padx=20, pady=(10, 5))
+        analytics_frame.grid_columnconfigure((0, 1), weight=1)
 
-        ctk.CTkLabel(status_card, text="📋 Case Status Overview", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=(15, 10))
+        # Abuse Card
+        abuse_card = ctk.CTkFrame(analytics_frame, fg_color="white", corner_radius=10)
+        abuse_card.grid(row=0, column=0, padx=(0, 10), sticky="nsew")
+        ctk.CTkLabel(abuse_card, text="🏆 Top 3 Abuse Types", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 10))
+        
+        sorted_abuse = sorted(self.abuse_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        for i, (abuse, count) in enumerate(sorted_abuse):
+            row = ctk.CTkFrame(abuse_card, fg_color="transparent")
+            row.pack(fill="x", padx=20, pady=2)
+            ctk.CTkLabel(row, text=f"#{i+1} {abuse}", font=("Arial", 11), text_color="#333333").pack(side="left")
+            ctk.CTkLabel(row, text=str(count), font=("Arial", 11, "bold"), text_color="#8b0000").pack(side="right")
 
-        status_container = ctk.CTkFrame(status_card, fg_color="white")
-        status_container.pack(fill="both", expand=True, padx=15, pady=(0, 15))
-
-        if self.status_counts:
-            for status, count in self.status_counts.items():
-                status_frame = ctk.CTkFrame(status_container, fg_color="#f8f9fa", corner_radius=6)
-                status_frame.pack(fill="x", pady=2)
-
-                # Status indicator colors
-                color_map = {
-                    "Ongoing": "#ffc107",
-                    "Resolved": "#28a745",
-                    "Referred": "#1a73e8"
-                }
-                indicator_color = color_map.get(status, "#6c757d")
-
-                # Status indicator
-                indicator = ctk.CTkFrame(status_frame, fg_color=indicator_color, width=12, height=12, corner_radius=6)
-                indicator.pack(side="left", padx=(10, 8), pady=8)
-                indicator.pack_propagate(False)
-
-                # Status text
-                ctk.CTkLabel(status_frame, text=f"{status}: {count}", font=("Arial", 12, "bold"), text_color="#1a2a4a").pack(side="left", pady=8)
+        # Hotspots Card (Top 3 Locations)
+        hotspot_card = ctk.CTkFrame(analytics_frame, fg_color="white", corner_radius=10)
+        hotspot_card.grid(row=0, column=1, padx=(10, 0), sticky="nsew")
+        ctk.CTkLabel(hotspot_card, text="📍 Barangay Hotspots", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 10))
+        
+        sorted_locations = sorted(self.location_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        if sorted_locations:
+            for i, (loc, count) in enumerate(sorted_locations):
+                row = ctk.CTkFrame(hotspot_card, fg_color="transparent")
+                row.pack(fill="x", padx=20, pady=2)
+                # Shorten address if too long
+                short_loc = (loc[:25] + '...') if len(loc) > 25 else loc
+                ctk.CTkLabel(row, text=f"#{i+1} {short_loc}", font=("Arial", 11), text_color="#333333").pack(side="left")
+                ctk.CTkLabel(row, text=str(count), font=("Arial", 11, "bold"), text_color="#1a73e8").pack(side="right")
         else:
-            ctk.CTkLabel(status_container, text="No case data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
+            ctk.CTkLabel(hotspot_card, text="No address data available", font=("Arial", 10, "italic")).pack(pady=10)
 
-        # Recent Entries Section
-        recent_frame = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
-        recent_frame.pack(fill="both", expand=True, padx=20, pady=(5, 10))
+        # Charts Section
+        charts_frame = ctk.CTkFrame(self.scroll_container, fg_color="#f5f5f5")
+        charts_frame.pack(fill="both", expand=True, padx=15, pady=5)
+        charts_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
-        ctk.CTkLabel(recent_frame, text="🕒 Recent Case Entries", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(anchor="w", padx=20, pady=(20, 10))
-
-        # Enhanced table styling
-        table_container = ctk.CTkFrame(recent_frame, fg_color="#f8f9fa", corner_radius=8)
-        table_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-
-        style = ttk.Style()
-        style.configure("Treeview.Heading", background="#1a2a4a", foreground="white", font=("Arial", 11, "bold"), padding=(10, 5))
-        style.configure("Treeview", rowheight=30, font=("Arial", 10), background="#ffffff", foreground="#000000")
-        style.map("Treeview", background=[("selected", "#8b0000")], foreground=[("selected", "#ffffff")])
-
-        self.tree = ttk.Treeview(table_container, columns=("VAWC No", "Date", "Client Name", "Type of Abuse", "Status", "Respondent"),
-                               show="headings", selectmode="browse")
-
-        # Configure columns with better widths and alignment
-        column_config = {
-            "VAWC No": (120, "center"),
-            "Date": (100, "center"),
-            "Client Name": (150, "w"),
-            "Type of Abuse": (120, "w"),
-            "Status": (100, "center"),
-            "Respondent": (150, "w")
-        }
-
-        for col, (width, anchor) in column_config.items():
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=width, anchor=anchor)
-
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(table_container, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-
-        self.tree.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=10)
-        scrollbar.pack(side="right", fill="y", padx=(5, 10), pady=10)
-
-        # Populate table with enhanced data
-        for index, row in enumerate(self.recent_entries):
-            tag = "evenrow" if index % 2 == 0 else "oddrow"
-            self.tree.insert("", "end", values=row, tags=(tag,))
-
-        self.tree.tag_configure("evenrow", background="#ffffff")
-        self.tree.tag_configure("oddrow", background="#f8f9fa")
-
-        # Abuse Types Breakdown Section
-        breakdown_frame = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
-        breakdown_frame.pack(fill="x", padx=20, pady=(0, 20))
-
-        ctk.CTkLabel(breakdown_frame, text="🎯 Abuse Types Distribution", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(anchor="w", padx=20, pady=(20, 10))
-
-        breakdown_container = ctk.CTkFrame(breakdown_frame, fg_color="#f8f9fa", corner_radius=8)
-        breakdown_container.pack(fill="x", padx=20, pady=(0, 20))
+        # Abuse Types Pie Chart
+        pie_card = ctk.CTkFrame(charts_frame, fg_color="white", corner_radius=10)
+        pie_card.grid(row=0, column=0, padx=8, pady=8, sticky="nsew")
+        ctk.CTkLabel(pie_card, text="Type of Abuse Distribution", font=("Arial", 15, "bold"), text_color="#1a2a4a").pack(pady=(12, 8))
 
         if self.abuse_counts:
-            # Sort by count descending
-            sorted_abuse = sorted(self.abuse_counts.items(), key=lambda x: x[1], reverse=True)
-
-            for abuse_type, count in sorted_abuse:
-                abuse_frame = ctk.CTkFrame(breakdown_container, fg_color="white", corner_radius=6)
-                abuse_frame.pack(fill="x", padx=10, pady=3)
-
-                # Progress bar visualization
-                progress_frame = ctk.CTkFrame(abuse_frame, fg_color="white")
-                progress_frame.pack(fill="x", padx=15, pady=8)
-
-                # Calculate percentage
-                total = sum(self.abuse_counts.values())
-                percentage = (count / total) * 100 if total > 0 else 0
-
-                # Type label
-                ctk.CTkLabel(progress_frame, text=f"{abuse_type}", font=("Arial", 12, "bold"), text_color="#1a2a4a").pack(side="left")
-
-                # Count and percentage
-                ctk.CTkLabel(progress_frame, text=f"{count} ({percentage:.1f}%)", font=("Arial", 11), text_color="#666666").pack(side="right")
-
-                # Simple progress bar using colored frame
-                progress_bar = ctk.CTkFrame(progress_frame, fg_color="#8b0000", height=6, corner_radius=3)
-                progress_bar.pack(fill="x", pady=(5, 0))
-                progress_bar.pack_propagate(False)
-
-                # Set width based on percentage (max 200px for demo)
-                bar_width = min(200, int(percentage * 2))
-                progress_bar.configure(width=bar_width)
+            fig1, ax1 = plt.subplots(figsize=(4.5, 4), facecolor='white')
+            colors = ['#8b0000', '#1a73e8', '#28a745', '#ffc107', '#dc3545', '#6f42c1', '#20c997']
+            ax1.pie(self.abuse_counts.values(), labels=self.abuse_counts.keys(), autopct='%1.1f%%', startangle=90, colors=colors[:len(self.abuse_counts)])
+            ax1.axis('equal')
+            canvas1 = FigureCanvasTkAgg(fig1, master=pie_card)
+            canvas1.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 15))
         else:
-            ctk.CTkLabel(breakdown_container, text="No abuse type data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
+            ctk.CTkLabel(pie_card, text="No data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
 
-    def get_case_status(self, vawc_no):
-        """Get case status for a specific VAWC number"""
-        try:
-            connection = get_connection()
-            cursor = connection.cursor()
-            cursor.execute("SELECT case_status FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
-            result = cursor.fetchone()
-            cursor.close()
-            connection.close()
-            return result[0] if result else "Unknown"
-        except Exception:
-            return "Unknown"
+        # Case Status Bar Chart
+        bar_card = ctk.CTkFrame(charts_frame, fg_color="white", corner_radius=10)
+        bar_card.grid(row=0, column=1, padx=8, pady=8, sticky="nsew")
+        ctk.CTkLabel(bar_card, text="Case Status Summary", font=("Arial", 15, "bold"), text_color="#1a2a4a").pack(pady=(12, 8))
+
+        if self.status_counts:
+            fig2, ax2 = plt.subplots(figsize=(4.5, 4), facecolor='white')
+            ax2.bar(self.status_counts.keys(), self.status_counts.values(), color=['#ffc107', '#28a745', '#1a73e8', '#dc3545'])
+            ax2.set_ylabel('Number of Cases')
+            canvas2 = FigureCanvasTkAgg(fig2, master=bar_card)
+            canvas2.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 15))
+        else:
+            ctk.CTkLabel(bar_card, text="No data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
+
+        # Age Demographics Chart
+        age_card = ctk.CTkFrame(charts_frame, fg_color="white", corner_radius=10)
+        age_card.grid(row=0, column=2, padx=8, pady=8, sticky="nsew")
+        ctk.CTkLabel(age_card, text="Victim Age Demographics", font=("Arial", 15, "bold"), text_color="#1a2a4a").pack(pady=(12, 8))
+
+        if self.age_groups:
+            fig4, ax4 = plt.subplots(figsize=(4.5, 4), facecolor='white')
+            labels = ['Children\n(0-17)', 'Adults\n(18-59)', 'Seniors\n(60+)']
+            counts = [self.age_groups.get('Children', 0), self.age_groups.get('Adults', 0), self.age_groups.get('Seniors', 0)]
+            colors = ['#dc3545', '#1a73e8', '#28a745']
+            ax4.bar(labels, counts, color=colors)
+            ax4.set_ylabel('Cases')
+            canvas4 = FigureCanvasTkAgg(fig4, master=age_card)
+            canvas4.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 15))
+        else:
+            ctk.CTkLabel(age_card, text="No age data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
+
+        # Trend Chart
+        trend_card = ctk.CTkFrame(self.scroll_container, fg_color="white", corner_radius=10)
+        trend_card.pack(fill="x", padx=20, pady=10)
+        ctk.CTkLabel(trend_card, text="Monthly Case Trends", font=("Arial", 15, "bold"), text_color="#1a2a4a").pack(pady=(12, 8))
+
+        # Follow-up Reminders (Bottom)
+        if self.reminders:
+            reminder_card = ctk.CTkFrame(self.scroll_container, fg_color="#fff3cd", border_width=1, border_color="#ffeeba", corner_radius=10)
+            reminder_card.pack(fill="x", padx=20, pady=10)
+            ctk.CTkLabel(reminder_card, text="⚠️ Follow-up Reminders (Untouched for 30+ Days)", font=("Arial", 14, "bold"), text_color="#856404").pack(pady=(10, 5))
+            
+            for vawc_no, client, updated in self.reminders:
+                row = ctk.CTkFrame(reminder_card, fg_color="transparent")
+                row.pack(fill="x", padx=20, pady=2)
+                ctk.CTkLabel(row, text=f"{vawc_no} - {client}", font=("Arial", 11), text_color="#856404").pack(side="left")
+                ctk.CTkLabel(row, text=f"Last update: {updated}", font=("Arial", 10, "italic"), text_color="#856404").pack(side="right")
+
+        if self.monthly_counts:
+            fig3, ax3 = plt.subplots(figsize=(9, 3.5), facecolor='white')
+            months = sorted(self.monthly_counts.keys())
+            counts = [self.monthly_counts[m] for m in months]
+            ax3.plot(months, counts, marker='o', linewidth=2, color='#8b0000')
+            ax3.fill_between(months, counts, alpha=0.3, color='#8b0000')
+            ax3.set_ylabel('Cases')
+            ax3.tick_params(axis='x', rotation=45)
+            canvas3 = FigureCanvasTkAgg(fig3, master=trend_card)
+            canvas3.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=(0, 15))
+        else:
+            ctk.CTkLabel(trend_card, text="No trend data available", font=("Arial", 12), text_color="#666666").pack(pady=20)
+
+    def refresh(self):
+        self.setup_ui()
 
     def load_data(self):
         try:
             connection = get_connection()
             cursor = connection.cursor()
 
-            cursor.execute("SELECT COUNT(*) FROM vawc_logs")
-            self.total_records = cursor.fetchone()[0]
+            # ... (Existing counts remain the same) ...
 
-            now = datetime.now()
-            cursor.execute("SELECT COUNT(*) FROM vawc_logs WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?", (str(now.year), f"{now.month:02d}"))
-            self.month_cases = cursor.fetchone()[0]
-
-            cursor.execute("SELECT COUNT(*) FROM vawc_logs WHERE strftime('%Y', date) = ?", (str(now.year),))
-            self.year_cases = cursor.fetchone()[0]
-
-            cursor.execute("SELECT vawc_no, date, client_name, type_of_abuse, case_status, name_of_respondent FROM vawc_logs ORDER BY created_at DESC LIMIT 10")
-            self.recent_entries = cursor.fetchall()
-
-            cursor.execute("SELECT type_of_abuse, COUNT(*) FROM vawc_logs GROUP BY type_of_abuse")
-            self.abuse_counts = {row[0]: row[1] for row in cursor.fetchall()}
+            # Handle multi-abuse counting separately
+            cursor.execute("SELECT type_of_abuse FROM vawc_logs")
+            self.abuse_counts = {}
+            for row in cursor.fetchall():
+                if row[0]:
+                    abuses = [a.strip() for a in row[0].split(',')]
+                    for abuse in abuses:
+                        if abuse:
+                            self.abuse_counts[abuse] = self.abuse_counts.get(abuse, 0) + 1
 
             cursor.execute("SELECT case_status, COUNT(*) FROM vawc_logs GROUP BY case_status")
-            self.status_counts = {row[0]: row[1] for row in cursor.fetchall()}
+            self.status_counts = {row[0]: row[1] for row in cursor.fetchall() if row[0]}
+
+            cursor.execute("SELECT strftime('%Y-%m', date), COUNT(*) FROM vawc_logs GROUP BY strftime('%Y-%m', date)")
+            self.monthly_counts = {row[0]: row[1] for row in cursor.fetchall()}
+
+            cursor.execute("SELECT address, COUNT(*) FROM vawc_logs GROUP BY address")
+            self.location_counts = {row[0]: row[1] for row in cursor.fetchall() if row[0]}
+
+            # Age Demographics
+            cursor.execute("SELECT age FROM vawc_logs")
+            self.age_groups = {'Children': 0, 'Adults': 0, 'Seniors': 0}
+            for row in cursor.fetchall():
+                if row[0]:
+                    try:
+                        age = int(row[0])
+                        if age < 18: self.age_groups['Children'] += 1
+                        elif age < 60: self.age_groups['Adults'] += 1
+                        else: self.age_groups['Seniors'] += 1
+                    except: pass
+
+            # Follow-up Reminders (Ongoing cases not touched for 30 days)
+            thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            cursor.execute("""
+                SELECT vawc_no, client_name, updated_at 
+                FROM vawc_logs 
+                WHERE case_status = 'Ongoing' AND updated_at < ?
+            """, (thirty_days_ago,))
+            self.reminders = cursor.fetchall()
 
             cursor.close()
             connection.close()
         except Exception:
-            self.total_records = 0
-            self.month_cases = 0
-            self.year_cases = 0
-            self.recent_entries = []
+            # ... (Error handling) ...
             self.abuse_counts = {}
             self.status_counts = {}
-
-    def refresh(self):
-        """Refresh the dashboard data and UI"""
-        self.setup_ui()
+            self.monthly_counts = {}
+            self.location_counts = {}
+            self.age_groups = {}
+            self.reminders = []

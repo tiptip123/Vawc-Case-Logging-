@@ -1,0 +1,56 @@
+🚀 VAWC SYSTEM — RELEASE CHECKLIST
+==================================
+
+Follow these steps every time you push a new version to GitHub to ensure the "Install Update" feature works perfectly for staff.
+
+1. UPDATE VERSION
+   - Open version.txt in the app root.
+   - Increment the version number (e.g., from 1.0.0 to 1.1.0).
+
+2. PREPARE MANIFEST
+   - Update update_manifest.json in the app root.
+   - Match the "version" to the one in version.txt.
+   - Write a short "description" of what changed.
+   - Ensure the "files" list includes EVERY file in the app (see Template below).
+
+3. VERIFY FILE STRUCTURE
+   - Ensure all new screens or utils are added to their respective folders.
+   - Check that no sensitive files (like vawc.db) are accidentally included in the manifest "files" list.
+
+4. PUSH TO GITHUB
+   - Commit and push all changes.
+
+5. STAFF UPDATE PROCESS (The "Pro Tip" Way)
+   - Staff downloads the "Source code (zip)" from the GitHub Release or Main branch.
+   - Staff extracts the ZIP folder.
+   - Staff opens VAWC App -> Settings -> Install Update.
+   - Staff points the folder picker to the extracted folder (e.g., vawc-app-main).
+   - DONE! ✅
+
+--------------------------------------------------
+📄 MANIFEST TEMPLATE (Copy & Paste)
+--------------------------------------------------
+{
+  "version": "X.X.X",
+  "description": "Short summary of changes",
+  "files": [
+    "version.txt",
+    "main.py",
+    "db.py",
+    "auth.py",
+    "vawc_number.py",
+    "screens/login.py",
+    "screens/main_window.py",
+    "screens/dashboard.py",
+    "screens/logs_tab.py",
+    "screens/add_record.py",
+    "screens/view_record.py",
+    "screens/edit_record.py",
+    "screens/reports.py",
+    "screens/settings.py",
+    "screens/user_management.py",
+    "utils/helpers.py",
+    "utils/pdf_export.py",
+    "utils/excel_export.py"
+  ]
+}

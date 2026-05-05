@@ -2,23 +2,42 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
+from tkinter import filedialog
 import os
 from datetime import datetime
 from db import get_connection
 
 
+def parse_date(date_str):
+    if not date_str:
+        return None
+    # Try common formats
+    for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+    return None
+
 def normalize_record(record):
     if record is None:
         return {}
     if isinstance(record, dict):
-        return record
+        # Already a dict, but might need date parsing if coming from UI
+        data = record.copy()
+        if isinstance(data.get('date'), str):
+            data['date'] = parse_date(data['date'])
+        if isinstance(data.get('birthdate'), str):
+            data['birthdate'] = parse_date(data['birthdate'])
+        return data
+        
     return {
         'vawc_no': record[1],
-        'date': datetime.strptime(record[2], '%Y-%m-%d') if record[2] else None,
+        'date': parse_date(record[2]),
         'client_name': record[3],
         'age': record[4],
         'contact': record[5],
-        'birthdate': datetime.strptime(record[6], '%Y-%m-%d') if record[6] else None,
+        'birthdate': parse_date(record[6]),
         'address': record[7],
         'type_of_abuse': record[8],
         'case_status': record[10] if record[10] else 'Ongoing',
@@ -30,7 +49,9 @@ def normalize_record(record):
 def export_single_pdf(record):
     record = normalize_record(record)
     filename = f"VAWC_{record['vawc_no']}.pdf"
-    path = os.path.join(os.path.expanduser("~/Desktop"), filename)
+    path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=filename, filetypes=[("PDF files", "*.pdf")])
+    if not path:
+        return None
     doc = SimpleDocTemplate(path, pagesize=letter)
     styles = getSampleStyleSheet()
     elements = []
@@ -67,10 +88,13 @@ def export_single_pdf(record):
     ]))
     elements.append(table)
     doc.build(elements)
+    return path
 
 def export_full_pdf():
     filename = "VAWC_Full_List.pdf"
-    path = os.path.join(os.path.expanduser("~/Desktop"), filename)
+    path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=filename, filetypes=[("PDF files", "*.pdf")])
+    if not path:
+        return
     doc = SimpleDocTemplate(path, pagesize=letter)
     styles = getSampleStyleSheet()
     elements = []

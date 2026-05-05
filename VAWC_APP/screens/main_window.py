@@ -1,17 +1,20 @@
 import customtkinter as ctk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import os
 from PIL import Image
 from .dashboard import DashboardFrame
 from .logs_tab import LogsTabFrame
-from .add_record import AddRecordWindow
+from .add_record import AddRecordFrame
 from .reports import ReportsFrame
 from .analytics import AnalyticsFrame
 from .user_management import UserManagementFrame
+from .settings import SettingsFrame
+from .audit_logs import AuditLogFrame
 
 class MainWindow(ctk.CTk):
-    def __init__(self, user_role):
+    def __init__(self, username, user_role):
         super().__init__()
+        self.username = username
         self.user_role = user_role
         self.title("VAWC Case Logging System")
         self.normal_geometry = "1100x680+100+100"
@@ -60,30 +63,25 @@ class MainWindow(ctk.CTk):
         # Sidebar
         self.sidebar = ctk.CTkFrame(self, width=220, fg_color="#1a2a4a")
         self.sidebar.grid(row=1, column=0, sticky="ns")
-        self.sidebar.grid_rowconfigure(8, weight=1)
+        self.sidebar.grid_rowconfigure(5, weight=1) # Push settings to bottom
 
         self.btn_dashboard = ctk.CTkButton(self.sidebar, text="Dashboard", fg_color="#1a2a4a", hover_color="#337ab7", command=self.show_dashboard)
         self.btn_dashboard.grid(row=0, column=0, pady=8, padx=10, sticky="ew")
 
         self.btn_logs = ctk.CTkButton(self.sidebar, text="VAWC Logs", fg_color="#1a2a4a", hover_color="#337ab7", command=self.show_logs)
-        self.btn_logs.grid(row=2, column=0, pady=8, padx=10, sticky="ew")
+        self.btn_logs.grid(row=1, column=0, pady=8, padx=10, sticky="ew")
 
         self.btn_add = ctk.CTkButton(self.sidebar, text="Add Record", fg_color="#1a2a4a", hover_color="#337ab7", command=self.show_add_record)
-        self.btn_add.grid(row=3, column=0, pady=8, padx=10, sticky="ew")
+        self.btn_add.grid(row=2, column=0, pady=8, padx=10, sticky="ew")
 
         self.btn_reports = ctk.CTkButton(self.sidebar, text="Reports", fg_color="#1a2a4a", hover_color="#337ab7", command=self.show_reports)
-        self.btn_reports.grid(row=4, column=0, pady=8, padx=10, sticky="ew")
+        self.btn_reports.grid(row=3, column=0, pady=8, padx=10, sticky="ew")
 
-        if user_role == "Admin":
-            self.btn_users = ctk.CTkButton(self.sidebar, text="User Management", fg_color="#1a2a4a", hover_color="#337ab7", command=self.show_user_management)
-            self.btn_users.grid(row=5, column=0, pady=8, padx=10, sticky="ew")
+        # Settings button at the bottom
+        self.btn_settings = ctk.CTkButton(self.sidebar, text="⚙ Settings", fg_color="#1a2a4a", hover_color="#337ab7", command=self.show_settings)
+        self.btn_settings.grid(row=6, column=0, pady=20, padx=10, sticky="ew")
 
-        self.btn_logout = ctk.CTkButton(self.sidebar, text="Logout", fg_color="#1a2a4a", hover_color="#337ab7", command=self.logout)
-        self.btn_logout.grid(row=7, column=0, pady=8, padx=10, sticky="ew")
-
-        self.sidebar_buttons = [self.btn_dashboard, self.btn_logs, self.btn_add, self.btn_reports, self.btn_logout]
-        if user_role == "Admin":
-            self.sidebar_buttons.insert(4, self.btn_users)
+        self.sidebar_buttons = [self.btn_dashboard, self.btn_logs, self.btn_add, self.btn_reports, self.btn_settings]
 
         # Content area
         self.content = ctk.CTkFrame(self, fg_color="#f5f5f5")
@@ -109,14 +107,22 @@ class MainWindow(ctk.CTk):
         self.set_active_button(self.btn_dashboard)
 
     def show_logs(self):
-        self.clear_content()
-        self.current_frame = LogsTabFrame(self.content, self.user_role)
-        self.current_frame.pack(fill="both", expand=True)
-        self.set_active_button(self.btn_logs)
+        try:
+            self.clear_content()
+            self.current_frame = LogsTabFrame(self.content, self.username)
+            self.current_frame.pack(fill="both", expand=True)
+            self.set_active_button(self.btn_logs)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load Logs: {str(e)}")
 
     def show_add_record(self):
-        AddRecordWindow(self, on_save=self.refresh_current_view)
-        self.set_active_button(self.btn_add)
+        try:
+            self.clear_content()
+            self.current_frame = AddRecordFrame(self.content, self.username, on_save=self.refresh_current_view)
+            self.current_frame.pack(fill="both", expand=True)
+            self.set_active_button(self.btn_add)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load Add Record: {str(e)}")
 
     def refresh_current_view(self):
         if self.current_frame and hasattr(self.current_frame, 'refresh'):
@@ -125,7 +131,6 @@ class MainWindow(ctk.CTk):
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
         self.attributes("-fullscreen", self.fullscreen)
-        self.btn_toggle.configure(text="🗗" if self.fullscreen else "🗖")
         if not self.fullscreen:
             self.geometry(self.normal_geometry)
 
@@ -148,7 +153,23 @@ class MainWindow(ctk.CTk):
         self.clear_content()
         self.current_frame = UserManagementFrame(self.content)
         self.current_frame.pack(fill="both", expand=True)
-        self.set_active_button(self.btn_users)
+        # Add back button to return to settings
+        back_btn = ctk.CTkButton(self.current_frame, text="← Back to Settings", command=self.show_settings, fg_color="transparent", text_color="#1a2a4a", hover_color="#eeeeee", width=120)
+        back_btn.place(x=20, y=10)
+
+    def show_audit_logs(self):
+        self.clear_content()
+        self.current_frame = AuditLogFrame(self.content)
+        self.current_frame.pack(fill="both", expand=True)
+        # Add back button
+        back_btn = ctk.CTkButton(self.current_frame, text="← Back to Settings", command=self.show_settings, fg_color="transparent", text_color="#1a2a4a", hover_color="#eeeeee", width=120)
+        back_btn.place(x=20, y=10)
+
+    def show_settings(self):
+        self.clear_content()
+        self.current_frame = SettingsFrame(self.content, self.user_role, self)
+        self.current_frame.pack(fill="both", expand=True)
+        self.set_active_button(self.btn_settings)
 
     def logout(self):
         self.destroy()

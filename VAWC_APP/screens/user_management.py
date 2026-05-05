@@ -188,30 +188,7 @@ class UserManagementFrame(ctk.CTkFrame):
             messagebox.showerror("Error", str(e))
 
     def add_user(self):
-        # Simple popup for add user
-        dialog = ctk.CTkInputDialog(text="Enter username:", title="Add User")
-        username = dialog.get_input()
-        if not username:
-            return
-        dialog = ctk.CTkInputDialog(text="Enter full name:", title="Add User")
-        full_name = dialog.get_input()
-        dialog = ctk.CTkInputDialog(text="Enter password:", title="Add User")
-        password = dialog.get_input()
-        dialog = ctk.CTkInputDialog(text="Enter role (Admin/Staff):", title="Add User")
-        role = dialog.get_input()
-        if role not in ["Admin", "Staff"]:
-            role = "Staff"
-        try:
-            hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-            connection = get_connection()
-            cursor = connection.cursor()
-            cursor.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)", (username, hashed.decode('utf-8'), full_name, role))
-            connection.commit()
-            cursor.close()
-            connection.close()
-            self.refresh()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+        AddUserDialog(self, on_save=self.refresh)
 
     def delete_user(self):
         item = self.tree.selection()
@@ -235,16 +212,210 @@ class UserManagementFrame(ctk.CTkFrame):
         if not item:
             return
         username = self.tree.item(item[0], "values")[0]
-        dialog = ctk.CTkInputDialog(text="Enter new password:", title="Change Password")
-        password = dialog.get_input()
+        AdminResetDialog(self, username, on_save=self.refresh)
+
+class AdminResetDialog(ctk.CTkToplevel):
+    def __init__(self, parent, target_username, on_save):
+        super().__init__(parent)
+        self.title("Reset User Password")
+        self.geometry("450x400")
+        self.target_username = target_username
+        self.on_save = on_save
+        self.user_data = self.load_user_data()
+        self.grab_set()
+        self.resizable(False, False)
+        
+        self.configure(fg_color="#f5f5f5")
+        
+        # Container
+        self.container = ctk.CTkFrame(self, fg_color="white", corner_radius=15)
+        self.container.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        self.show_verification_step()
+
+    def load_user_data(self):
         try:
-            hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = ?", (self.target_username,))
+            data = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return data
+        except: return None
+
+    def show_verification_step(self):
+        for w in self.container.winfo_children(): w.destroy()
+        
+        ctk.CTkLabel(self.container, text=f"Verify to Reset: {self.target_username}", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=20)
+        
+        ctk.CTkLabel(self.container, text="Enter the user's 6-digit passcode:", anchor="w", font=("Arial", 11)).pack(fill="x", padx=40, pady=(10, 2))
+        self.entry_verify_pass = ctk.CTkEntry(self.container, height=40, show="*")
+        self.entry_verify_pass.pack(fill="x", padx=40, pady=(0, 10))
+        
+        ctk.CTkButton(self.container, text="Verify Passcode", fg_color="#1a2a4a", command=self.verify_passcode).pack(fill="x", padx=40, pady=10)
+        
+        ctk.CTkButton(self.container, text="Use Security Question instead", fg_color="transparent", text_color="#1a73e8", font=("Arial", 11), command=self.show_security_step).pack(pady=5)
+
+    def verify_passcode(self):
+        if self.entry_verify_pass.get() == self.user_data[5]:
+            self.show_reset_step()
+        else:
+            messagebox.showerror("Error", "Incorrect passcode.")
+
+    def show_security_step(self):
+        for w in self.container.winfo_children(): w.destroy()
+        
+        ctk.CTkLabel(self.container, text="Security Verification", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=20)
+        
+        question = self.user_data[6] or "No security question set."
+        ctk.CTkLabel(self.container, text=question, font=("Arial", 12, "bold"), wraplength=350).pack(pady=10)
+        
+        self.entry_verify_sec = ctk.CTkEntry(self.container, height=40, placeholder_text="Answer")
+        self.entry_verify_sec.pack(fill="x", padx=40, pady=10)
+        
+        ctk.CTkButton(self.container, text="Verify Answer", fg_color="#1a2a4a", command=self.verify_security).pack(fill="x", padx=40, pady=10)
+        
+        ctk.CTkButton(self.container, text="← Back", fg_color="transparent", text_color="#666666", command=self.show_verification_step).pack(pady=5)
+
+    def verify_security(self):
+        answer = self.entry_verify_sec.get().strip().lower()
+        stored_hash = self.user_data[7]
+        if stored_hash and bcrypt.checkpw(answer.encode('utf-8'), stored_hash.encode('utf-8')):
+            self.show_reset_step()
+        else:
+            messagebox.showerror("Error", "Incorrect answer.")
+
+    def show_reset_step(self):
+        for w in self.container.winfo_children(): w.destroy()
+        
+        ctk.CTkLabel(self.container, text="Set New Password", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=20)
+        
+        self.entry_new_p1 = ctk.CTkEntry(self.container, height=40, placeholder_text="New Password", show="*")
+        self.entry_new_p1.pack(fill="x", padx=40, pady=10)
+        
+        self.entry_new_p2 = ctk.CTkEntry(self.container, height=40, placeholder_text="Confirm Password", show="*")
+        self.entry_new_p2.pack(fill="x", padx=40, pady=10)
+        
+        ctk.CTkButton(self.container, text="Reset Password", fg_color="#28a745", command=self.do_reset).pack(fill="x", padx=40, pady=20)
+
+    def do_reset(self):
+        p1 = self.entry_new_p1.get()
+        p2 = self.entry_new_p2.get()
+        if p1 != p2:
+            messagebox.showerror("Error", "Passwords do not match.")
+            return
+            
+        try:
+            hashed = bcrypt.hashpw(p1.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed, self.target_username))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            messagebox.showinfo("Success", f"Password for {self.target_username} has been reset.")
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+class AddUserDialog(ctk.CTkToplevel):
+    def __init__(self, parent, on_save):
+        super().__init__(parent)
+        self.title("Add New User")
+        self.geometry("500x750")
+        self.on_save = on_save
+        self.resizable(False, False)
+        self.grab_set()
+
+        self.configure(fg_color="#f5f5f5")
+
+        # Container
+        container = ctk.CTkFrame(self, fg_color="white", corner_radius=15)
+        container.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(container, text="👤 Create User Account", font=("Arial", 18, "bold"), text_color="#1a2a4a").pack(pady=20)
+
+        # Fields
+        self.create_field(container, "Username", "entry_username")
+        self.create_field(container, "Full Name", "entry_full_name")
+        self.create_field(container, "Password", "entry_password", show="*")
+        
+        # Passcode
+        ctk.CTkLabel(container, text="Passcode (6-digit numeric)", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
+        self.entry_passcode = ctk.CTkEntry(container, placeholder_text="e.g. 123456", height=40)
+        self.entry_passcode.pack(fill="x", padx=30, pady=(0, 10))
+
+        # Role
+        ctk.CTkLabel(container, text="Role", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
+        self.role_var = ctk.StringVar(value="Staff")
+        self.role_menu = ctk.CTkOptionMenu(container, values=["Staff", "Admin"], variable=self.role_var, height=40, fg_color="#1a2a4a")
+        self.role_menu.pack(fill="x", padx=30, pady=(0, 10))
+
+        # Security Question
+        ctk.CTkLabel(container, text="Security Question", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
+        self.questions = [
+            "What is your favorite food?",
+            "What is your mother's maiden name?",
+            "What is your pet's name?",
+            "What is your best friend's name?",
+            "What is the name of your elementary school?"
+        ]
+        self.question_var = ctk.StringVar(value=self.questions[0])
+        self.question_menu = ctk.CTkOptionMenu(container, values=self.questions, variable=self.question_var, height=40, fg_color="#1a2a4a")
+        self.question_menu.pack(fill="x", padx=30, pady=(0, 10))
+
+        # Security Answer
+        ctk.CTkLabel(container, text="Security Answer", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
+        self.entry_answer = ctk.CTkEntry(container, placeholder_text="Your answer here", height=40)
+        self.entry_answer.pack(fill="x", padx=30, pady=(0, 20))
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(container, fg_color="transparent")
+        btn_frame.pack(fill="x", side="bottom", pady=20)
+
+        ctk.CTkButton(btn_frame, text="Cancel", fg_color="#6c757d", hover_color="#5a6268", command=self.destroy, width=120).pack(side="left", padx=(30, 0))
+        ctk.CTkButton(btn_frame, text="Create User", fg_color="#28a745", hover_color="#218838", command=self.save_user, width=150).pack(side="right", padx=(0, 30))
+
+    def create_field(self, parent, label, attr_name, show=None):
+        ctk.CTkLabel(parent, text=label, anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
+        entry = ctk.CTkEntry(parent, placeholder_text=f"Enter {label.lower()}", height=40, show=show)
+        entry.pack(fill="x", padx=30, pady=(0, 10))
+        setattr(self, attr_name, entry)
+
+    def save_user(self):
+        username = self.entry_username.get().strip()
+        full_name = self.entry_full_name.get().strip()
+        password = self.entry_password.get().strip()
+        passcode = self.entry_passcode.get().strip()
+        role = self.role_var.get()
+        question = self.question_var.get()
+        answer = self.entry_answer.get().strip().lower()
+
+        if not all([username, full_name, password, passcode, answer]):
+            messagebox.showerror("Error", "All fields are required.")
+            return
+
+        if not passcode.isdigit() or len(passcode) > 6:
+            messagebox.showerror("Error", "Passcode must be numeric and max 6 digits.")
+            return
+
+        try:
+            hashed_pass = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            hashed_answer = bcrypt.hashpw(answer.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed.decode('utf-8'), username))
+            cursor.execute("""
+                INSERT INTO users (username, password_hash, full_name, role, passcode, security_question, security_answer)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (username, hashed_pass, full_name, role, passcode, question, hashed_answer))
             connection.commit()
             cursor.close()
             connection.close()
-            messagebox.showinfo("Success", "Password changed.")
+            
+            messagebox.showinfo("Success", "User account created successfully.")
+            self.on_save()
+            self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))

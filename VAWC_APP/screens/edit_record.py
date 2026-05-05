@@ -70,7 +70,7 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(form_frame, text="Type of Abuse", anchor="w").pack(fill="x", padx=10, pady=(0, 2))
         self.abuse_vars = {}
-        abuses = ["Physical", "Sexual", "Psychological", "Economic"]
+        abuses = ["Physical", "Sexual", "Psychological", "Economic", "Settled", "Issued BPO"]
         existing_abuses = set(self.record[8].split(", ")) if self.record[8] else set()
         abuse_frame = ctk.CTkFrame(form_frame, fg_color="#eef0f4")
         abuse_frame.pack(fill="x", padx=10, pady=(0, 10))
@@ -87,7 +87,7 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(form_frame, text="Case Status", anchor="w").pack(fill="x", padx=10, pady=(0, 2))
         self.case_status_var = ctk.StringVar(value=self.record[10] or "Ongoing")
-        self.case_status_menu = ctk.CTkOptionMenu(form_frame, values=["Ongoing", "Resolved", "Referred", "Archived"], variable=self.case_status_var)
+        self.case_status_menu = ctk.CTkOptionMenu(form_frame, values=["Ongoing", "Settled", "Referred", "Archived"], variable=self.case_status_var)
         self.case_status_menu.pack(padx=10, pady=(0, 10), fill="x")
 
         ctk.CTkLabel(form_frame, text="Attachments", anchor="w").pack(fill="x", padx=10, pady=(0, 2))

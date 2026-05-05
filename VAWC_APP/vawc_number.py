@@ -1,8 +1,11 @@
 from db import get_connection
 from datetime import datetime
 
-def generate_vawc_number():
-    year = datetime.now().year
+def generate_vawc_number(report_date=None):
+    if report_date is None:
+        report_date = datetime.now()
+    
+    year = report_date.year
     prefix = f"VAWC-{year}-"
     try:
         connection = get_connection()

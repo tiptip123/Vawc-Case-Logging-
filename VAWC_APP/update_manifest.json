@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "description": "Initial version with redesigned sidebar and settings page.",
+  "files": [
+    "version.txt",
+    "main.py",
+    "db.py",
+    "auth.py",
+    "vawc_number.py",
+    "screens/login.py",
+    "screens/main_window.py",
+    "screens/dashboard.py",
+    "screens/logs_tab.py",
+    "screens/add_record.py",
+    "screens/view_record.py",
+    "screens/edit_record.py",
+    "screens/reports.py",
+    "screens/settings.py",
+    "screens/user_management.py",
+    "utils/helpers.py",
+    "utils/pdf_export.py",
+    "utils/excel_export.py"
+  ]
+}

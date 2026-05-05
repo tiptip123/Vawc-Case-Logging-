@@ -1,11 +1,14 @@
 import openpyxl
 from openpyxl.styles import Font
+from tkinter import filedialog
 import os
 from db import get_connection
 
 def export_to_excel():
     filename = "VAWC_Records.xlsx"
-    path = os.path.join(os.path.expanduser("~/Desktop"), filename)
+    path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile=filename, filetypes=[("Excel files", "*.xlsx")])
+    if not path:
+        return
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "VAWC Logs"
