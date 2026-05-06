@@ -11,7 +11,7 @@ from .edit_record import EditRecordWindow
 
 class LogsTabFrame(ctk.CTkFrame):
     def __init__(self, parent, username):
-        super().__init__(parent, fg_color="#f5f5f5")
+        super().__init__(parent, fg_color="transparent")
 
         self.username = username
         self.page = 0
@@ -43,111 +43,170 @@ class LogsTabFrame(ctk.CTkFrame):
             widget.destroy()
 
         # ================= FILTER SECTION =================
-        filter_card = ctk.CTkFrame(self.table_view, fg_color="#FFFFFF", corner_radius=15)
+        filter_card = ctk.CTkFrame(self.table_view, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
         filter_card.pack(fill="x", padx=20, pady=(20, 10))
         
-        # ... (Filters remain the same, just keeping structure) ...
-        # Filter Title
-        ctk.CTkLabel(filter_card, text="🔍 Search & Filter Logs", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(anchor="w", padx=20, pady=(15, 10))
+        filter_grid = ctk.CTkFrame(filter_card, fg_color="transparent")
+        filter_grid.pack(fill="x", padx=20, pady=15)
 
-        filter_grid = ctk.CTkFrame(filter_card, fg_color="transparent", corner_radius=0)
-        filter_grid.pack(fill="x", padx=20, pady=(0, 15))
-
-        # Search Bar (Top Row)
-        search_frame = ctk.CTkFrame(filter_grid, fg_color="transparent", corner_radius=0)
-        search_frame.pack(fill="x", pady=(0, 15))
-        ctk.CTkLabel(search_frame, text="Search Record", font=("Arial", 12, "bold"), text_color="#1a2a4a").pack(side="left", padx=(0, 10))
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="Search by name, VAWC No, or respondent...", border_width=2, height=35)
-        self.search_entry.pack(side="left", fill="x", expand=True)
+        # Row 1: Search & Abuse Filter
+        row1 = ctk.CTkFrame(filter_grid, fg_color="transparent")
+        row1.pack(fill="x", pady=(0, 10))
+        
+        # Search
+        search_container = ctk.CTkFrame(row1, fg_color="transparent")
+        search_container.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.search_entry = ctk.CTkEntry(search_container, placeholder_text="🔍 Search by name, VAWC No, respondent...", 
+                                        height=40, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"])
+        self.search_entry.pack(fill="x")
         self.search_entry.bind("<KeyRelease>", self.on_filter)
 
-        # Dropdowns (Bottom Row)
-        dropdown_row = ctk.CTkFrame(filter_grid, fg_color="transparent", corner_radius=0)
-        dropdown_row.pack(fill="x")
-
-        # Type of Abuse
-        abuse_col = ctk.CTkFrame(dropdown_row, fg_color="transparent", corner_radius=0)
-        abuse_col.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        ctk.CTkLabel(abuse_col, text="Type of Abuse", font=("Arial", 11, "bold"), text_color="#1a2a4a").pack(anchor="w")
+        # Abuse Dropdown
         self.abuse_var = ctk.StringVar()
-        self.abuse_combo = ctk.CTkComboBox(abuse_col, variable=self.abuse_var, values=[""] + self.get_abuse_types(), height=35, command=self.on_filter)
-        self.abuse_combo.pack(fill="x", pady=2)
+        self.abuse_combo = ctk.CTkComboBox(row1, variable=self.abuse_var, values=["Type of Abuse"] + self.get_abuse_types(), 
+                                           height=40, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"], command=self.on_filter)
+        self.abuse_combo.pack(side="left", padx=5)
 
-        # Case Status
-        status_col = ctk.CTkFrame(dropdown_row, fg_color="transparent", corner_radius=0)
-        status_col.pack(side="left", fill="x", expand=True, padx=10)
-        ctk.CTkLabel(status_col, text="Case Status", font=("Arial", 11, "bold"), text_color="#1a2a4a").pack(anchor="w")
+        # Row 2: Status, Year, Month, Clear
+        row2 = ctk.CTkFrame(filter_grid, fg_color="transparent")
+        row2.pack(fill="x")
+
         self.status_var = ctk.StringVar()
-        self.status_combo = ctk.CTkComboBox(status_col, variable=self.status_var, values=["", "Ongoing", "Settled", "Referred", "Archived", "Issued BPO"], height=35, command=self.on_filter)
-        self.status_combo.pack(fill="x", pady=2)
+        self.status_combo = ctk.CTkComboBox(row2, variable=self.status_var, values=["Status", "Ongoing", "Settled", "Referred", "Archived", "Issued BPO"], 
+                                            height=40, corner_radius=8, command=self.on_filter)
+        self.status_combo.pack(side="left", padx=(0, 10))
 
-        # Year
-        year_col = ctk.CTkFrame(dropdown_row, fg_color="transparent", corner_radius=0)
-        year_col.pack(side="left", fill="x", expand=True, padx=10)
-        ctk.CTkLabel(year_col, text="Year", font=("Arial", 11, "bold"), text_color="#1a2a4a").pack(anchor="w")
         self.year_var = ctk.StringVar()
-        self.year_combo = ctk.CTkComboBox(year_col, variable=self.year_var, values=[""] + [str(y) for y in range(datetime.now().year, 2019, -1)], height=35, command=self.on_filter)
-        self.year_combo.pack(fill="x", pady=2)
+        self.year_combo = ctk.CTkComboBox(row2, variable=self.year_var, values=["Year"] + [str(y) for y in range(datetime.now().year, 2019, -1)], 
+                                          height=40, corner_radius=8, command=self.on_filter)
+        self.year_combo.pack(side="left", padx=5)
 
-        # Month
-        month_col = ctk.CTkFrame(dropdown_row, fg_color="transparent", corner_radius=0)
-        month_col.pack(side="left", fill="x", expand=True, padx=10)
-        ctk.CTkLabel(month_col, text="Month", font=("Arial", 11, "bold"), text_color="#1a2a4a").pack(anchor="w")
         self.month_var = ctk.StringVar()
-        months = ["", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
-        self.month_combo = ctk.CTkComboBox(month_col, variable=self.month_var, values=months, height=35, command=self.on_filter)
-        self.month_combo.pack(fill="x", pady=2)
+        self.month_combo = ctk.CTkComboBox(row2, variable=self.month_var, values=["Month", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], 
+                                           height=40, corner_radius=8, command=self.on_filter)
+        self.month_combo.pack(side="left", padx=5)
 
-        # Clear Button
-        button_col = ctk.CTkFrame(dropdown_row, fg_color="transparent", corner_radius=0)
-        button_col.pack(side="left", padx=(10, 0))
-        ctk.CTkLabel(button_col, text="", font=("Arial", 11)).pack()
-        self.btn_clear = ctk.CTkButton(button_col, text="Clear Filters", command=self.clear_filters, fg_color="#6c757d", hover_color="#5a6268", width=100, height=35)
-        self.btn_clear.pack(pady=2)
+        self.btn_clear = ctk.CTkButton(row2, text="Clear Filters", command=self.clear_filters, fg_color="transparent", 
+                                       text_color=["#64748b", "#94a3b8"], border_width=1, border_color=["#e2e8f0", "#333333"], height=40, corner_radius=8)
+        self.btn_clear.pack(side="left", padx=10)
 
-        # ================= TABLE =================
-        table_container = ctk.CTkFrame(self.table_view, fg_color="#ffffff", corner_radius=15)
-        table_container.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        # Record Count Label
+        self.count_label = ctk.CTkLabel(row2, text="Showing 0 records", font=("Arial", 12), text_color=["#64748b", "#94a3b8"])
+        self.count_label.pack(side="right", padx=10)
 
-        # Action Toolbar (New)
-        toolbar = ctk.CTkFrame(table_container, fg_color="transparent", corner_radius=0)
-        toolbar.pack(fill="x", padx=20, pady=10)
+        # ================= TABLE SECTION =================
+        table_card = ctk.CTkFrame(self.table_view, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        table_card.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        # Action Toolbar
+        toolbar = ctk.CTkFrame(table_card, fg_color="transparent")
+        toolbar.pack(fill="x", padx=20, pady=15)
         
         if not self.selection_mode:
-            self.btn_delete_trigger = ctk.CTkButton(toolbar, text="🗑 Delete Records", command=self.toggle_selection_mode, fg_color="#dc3545", hover_color="#c82333", height=35, width=140, font=("Arial", 12, "bold"))
+            self.btn_delete_trigger = ctk.CTkButton(toolbar, text="🗑 Delete", command=self.toggle_selection_mode, 
+                                                    fg_color="transparent", text_color="#dc2626", border_width=1, border_color=["#fecaca", "#7f1d1d"], 
+                                                    height=32, corner_radius=6, font=("Arial", 12, "bold"))
             self.btn_delete_trigger.pack(side="left")
         else:
-            self.btn_confirm_del = ctk.CTkButton(toolbar, text="⚠ Confirm Delete", command=self.delete_selected, fg_color="#8b0000", hover_color="#6b0000", height=35, width=140, font=("Arial", 12, "bold"))
+            self.btn_confirm_del = ctk.CTkButton(toolbar, text="Confirm Delete", command=self.delete_selected, 
+                                                 fg_color="#dc2626", hover_color="#b91c1c", height=32, corner_radius=6)
             self.btn_confirm_del.pack(side="left")
             
-            self.btn_cancel_del = ctk.CTkButton(toolbar, text="Cancel", command=self.toggle_selection_mode, fg_color="transparent", text_color="#333333", border_width=1, border_color="#cccccc", height=35, width=80)
+            self.btn_cancel_del = ctk.CTkButton(toolbar, text="Cancel", command=self.toggle_selection_mode, 
+                                                fg_color="transparent", text_color=["#64748b", "#94a3b8"], height=32, corner_radius=6)
             self.btn_cancel_del.pack(side="left", padx=10)
 
-        # Treeview
-        table_frame = ctk.CTkFrame(table_container, fg_color="transparent", corner_radius=0)
+        # Treeview (Professional Style)
+        table_frame = ctk.CTkFrame(table_card, fg_color="transparent")
         table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
+        # Theme-aware Treeview styling (match other screens)
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        tree_bg = "#ffffff" if not is_dark else "#2b2b2b"
+        tree_fg = "#000000" if not is_dark else "#ffffff"
+        heading_bg = "#f1f5f9" if not is_dark else "#1a1a1a"
+
         style = ttk.Style()
-        # Force a theme that allows heading background customization
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
-            
-        style.configure("Treeview", background="#ffffff", foreground="#000000", rowheight=30, fieldbackground="#ffffff", font=("Arial", 10))
+        style.configure(
+            "Treeview",
+            background=tree_bg,
+            foreground=tree_fg,
+            rowheight=38,
+            fieldbackground=tree_bg,
+            font=("Arial", 11),
+            borderwidth=0,
+        )
         style.map("Treeview", background=[("selected", "#1a2a4a")], foreground=[("selected", "#ffffff")])
-        style.configure("Treeview.Heading", background="#000000", foreground="#ffffff", font=("Arial", 11, "bold"), borderwidth=1)
-        style.map("Treeview.Heading", background=[("active", "#333333")])
+
+        style.configure(
+            "Treeview.Heading",
+            background=heading_bg,
+            foreground=tree_fg,
+            font=("Arial", 11, "bold"),
+            borderwidth=0,
+        )
+
+        # Improve separator/row look slightly in both themes
+        style.configure("Treeview", highlightthickness=0)
 
         self.tree = ttk.Treeview(
             table_frame,
-            columns=("Select", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"),
+            columns=("Select", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent", "Referred To"),
             show="headings",
             selectmode="browse"
         )
 
-        col_widths = {"Select": 50, "VAWC No": 140, "Date": 100, "Client Name": 180, "Age": 60, "Type of Abuse": 160, "Case Status": 110, "Respondent": 170}
+        # Configure tags with single strings (ttk doesn't support tuples)
+        # Base row styling
+        self.tree.tag_configure("evenrow", background="#242424" if is_dark else "#ffffff", foreground="#ffffff" if is_dark else "#000000")
+        self.tree.tag_configure("oddrow", background="#1e1e1e" if is_dark else "#f8fafc", foreground="#ffffff" if is_dark else "#000000")
+
+        # Status-only coloring (ttk Treeview cannot style only a single column cell via tags.
+        # So we color the entire row, but keep other tags for readability; priority is status indicator.)
+        self.tree.tag_configure(
+            "status_referred",
+            background="#0b3a66" if is_dark else "#eff6ff",
+            foreground="#60a5fa" if is_dark else "#2563eb",
+            font=("Arial", 11, "bold"),
+        )
+        self.tree.tag_configure(
+            "status_ongoing",
+            background="#064e3b" if is_dark else "#ecfdf5",
+            foreground="#34d399" if is_dark else "#16a34a",
+            font=("Arial", 11, "bold"),
+        )
+        self.tree.tag_configure(
+            "status_settled",
+            background="#b45309" if is_dark else "#fffbeb",
+            foreground="#fbbf24" if is_dark else "#d97706",
+            font=("Arial", 11, "bold"),
+        )
+
+
+        # Column alignment (readability)
+        self.tree.column("VAWC No", width=140, anchor="center")
+        self.tree.column("Date", width=100, anchor="center")
+        self.tree.column("Client Name", width=180, anchor="w")
+        self.tree.column("Age", width=50, anchor="center")
+        self.tree.column("Type of Abuse", width=160, anchor="w")
+        self.tree.column("Case Status", width=110, anchor="center")
+        self.tree.column("Respondent", width=160, anchor="w")
+        self.tree.column("Referred To", width=140, anchor="w")
+
+
+        # Column Config
+        self.tree.column("Select", width=40, anchor="center")
+        self.tree.column("VAWC No", width=140, anchor="w")
+        self.tree.column("Date", width=100, anchor="center")
+        self.tree.column("Client Name", width=180, anchor="w")
+        self.tree.column("Age", width=50, anchor="center")
+        self.tree.column("Type of Abuse", width=160, anchor="w")
+        self.tree.column("Case Status", width=100, anchor="center")
+        self.tree.column("Respondent", width=160, anchor="w")
+        self.tree.column("Referred To", width=120, anchor="w")
+
         for col in self.tree["columns"]:
             self.tree.heading(col, text=col if col != "Select" else "")
-            self.tree.column(col, width=col_widths.get(col, 130), anchor="center" if col in ["Select", "Age", "Date"] else "w")
 
         if not self.selection_mode:
             self.tree.column("Select", width=0, stretch=False)
@@ -155,34 +214,30 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.bind("<Double-1>", self.on_double_click)
         self.tree.bind("<Button-1>", self.on_click)
 
-        scrollbar_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        scrollbar_x = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-
-        self.tree.pack(side="top", fill="both", expand=True)
-        scrollbar_y.pack(side="right", fill="y")
-        scrollbar_x.pack(side="bottom", fill="x")
-
-        # ================= COMPACT PAGINATION =================
-        pagination_frame = ctk.CTkFrame(table_container, fg_color="transparent", corner_radius=0)
-        pagination_frame.pack(fill="x", padx=20, pady=(0, 15))
+        # Custom Scrollbar
+        scrollbar = ctk.CTkScrollbar(table_frame, orientation="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
         
-        page_controls = ctk.CTkFrame(pagination_frame, fg_color="transparent", corner_radius=0)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Compact Pagination
+        pagination = ctk.CTkFrame(table_card, fg_color="transparent")
+        pagination.pack(fill="x", padx=20, pady=(0, 15))
+        
+        page_controls = ctk.CTkFrame(pagination, fg_color="transparent")
         page_controls.pack(side="right")
 
-        btn_page_style = {"width": 60, "height": 28, "font": ("Arial", 11), "border_width": 1, "border_color": "#cccccc", "fg_color": "transparent", "text_color": "#333333", "hover_color": "#f0f0f0"}
-        
-        self.btn_prev = ctk.CTkButton(page_controls, text="‹ Prev", command=self.prev_page, **btn_page_style)
-        self.btn_prev.pack(side="left", padx=5)
+        self.btn_prev = ctk.CTkButton(page_controls, text="‹", width=32, height=32, command=self.prev_page, 
+                                      fg_color="white", text_color="#0f172a", border_width=1, border_color="#e2e8f0")
+        self.btn_prev.pack(side="left", padx=2)
 
-        total_pages = (self.total_count + self.limit - 1) // self.limit if hasattr(self, 'total_count') and self.total_count > 0 else 1
-        self.page_label = ctk.CTkLabel(page_controls, text=f"Page {self.page + 1} of {total_pages}", font=("Arial", 10), text_color="#666666")
+        self.page_label = ctk.CTkLabel(page_controls, text="Page 1 of 1", font=("Arial", 11), text_color="#64748b")
         self.page_label.pack(side="left", padx=10)
 
-        self.btn_next = ctk.CTkButton(page_controls, text="Next ›", command=self.next_page, **btn_page_style)
-        self.btn_next.pack(side="left", padx=5)
-
-        self.load_data()
+        self.btn_next = ctk.CTkButton(page_controls, text="›", width=32, height=32, command=self.next_page, 
+                                      fg_color="white", text_color="#0f172a", border_width=1, border_color="#e2e8f0")
+        self.btn_next.pack(side="left", padx=2)
 
         self.load_data()
 
@@ -216,12 +271,13 @@ class LogsTabFrame(ctk.CTkFrame):
         self.on_filter()
 
     def load_data(self):
+        connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
 
             # Get total count for pagination
-            count_query = "SELECT COUNT(*) FROM vawc_logs WHERE 1=1"
+            count_query = "SELECT COUNT(*) FROM vawc_logs WHERE is_deleted = 0"
             params = []
             
             if self.search_term:
@@ -255,7 +311,7 @@ class LogsTabFrame(ctk.CTkFrame):
                 self.page_label.configure(text=f"Page {self.page + 1} of {total_pages}")
 
             # Fetch data
-            query = "SELECT '☐', vawc_no, date, client_name, age, type_of_abuse, case_status, name_of_respondent FROM vawc_logs WHERE 1=1"
+            query = "SELECT '☐', vawc_no, date, client_name, age, type_of_abuse, case_status, name_of_respondent, referred_to FROM vawc_logs WHERE is_deleted = 0"
             
             # Reuse filters from count_query
             if self.search_term:
@@ -269,7 +325,7 @@ class LogsTabFrame(ctk.CTkFrame):
             if self.filter_month:
                 query += " AND strftime('%m', date) = ?"
 
-            query += " ORDER BY date ASC, vawc_no ASC LIMIT ? OFFSET ?"
+            query += " ORDER BY date DESC, vawc_no DESC LIMIT ? OFFSET ?"
             params.extend([self.limit, self.page * self.limit])
 
             cursor.execute(query, params)
@@ -282,17 +338,33 @@ class LogsTabFrame(ctk.CTkFrame):
             for i, row in enumerate(rows):
                 vawc_no = row[1]
                 check_char = "☑" if vawc_no in self.selected_vawc_nos else "☐"
-                display_row = (check_char,) + row[1:]
+                
+                # Format Referred To with a symbol if present
+                ref_to = row[8]
+                display_ref = ref_to if ref_to and ref_to != "None" else ""
+                
+                display_row = (check_char, row[1], row[2], row[3], row[4], row[5], row[6], row[7], display_ref)
                 tag = "evenrow" if i % 2 == 0 else "oddrow"
-                self.tree.insert("", "end", values=display_row, tags=(tag,))
+                
+                # Apply special tag for referred cases to show visual badge
+                if row[6] == "Referred":
+                    tags = ("referred_row",)
+                else:
+                    tags = (tag,)
+                
+                self.tree.insert("", "end", values=display_row, tags=tags)
 
-            self.tree.tag_configure("evenrow", background="#ffffff")
-            self.tree.tag_configure("oddrow", background="#eef0f4")
+            # Update count label
+            if hasattr(self, 'count_label'):
+                start = self.page * self.limit + 1 if self.total_count > 0 else 0
+                end = min((self.page + 1) * self.limit, self.total_count)
+                self.count_label.configure(text=f"Showing {start}-{end} of {self.total_count} records")
 
-            cursor.close()
-            connection.close()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+        finally:
+            if connection:
+                connection.close()
 
     def prev_page(self):
         if self.page > 0:
@@ -300,34 +372,16 @@ class LogsTabFrame(ctk.CTkFrame):
             self.load_data()
 
     def next_page(self):
-        self.page += 1
-        self.load_data()
+        total_pages = (self.total_count + self.limit - 1) // self.limit
+        if self.page < total_pages - 1:
+            self.page += 1
+            self.load_data()
 
     def refresh(self):
         """Refresh the logs data"""
         self.load_data()
 
-    def delete_entry(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Warning", "Please select a record to delete.")
-            return
 
-        item = selected[0]
-        vawc_no = self.tree.item(item, "values")[0]
-
-        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete record {vawc_no}?"):
-            try:
-                connection = get_connection()
-                cursor = connection.cursor()
-                cursor.execute("DELETE FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
-                connection.commit()
-                cursor.close()
-                connection.close()
-                messagebox.showinfo("Success", "Record deleted successfully.")
-                self.load_data()
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
 
     def on_double_click(self, event):
         if self.selection_mode:
@@ -368,19 +422,24 @@ class LogsTabFrame(ctk.CTkFrame):
             return
 
         count = len(self.selected_vawc_nos)
-        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {count} selected record(s)?"):
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to soft-delete {count} selected record(s)?\nRecords can be restored from Settings later."):
+            connection = None
             try:
                 connection = get_connection()
                 cursor = connection.cursor()
                 for vawc_no in self.selected_vawc_nos:
-                    cursor.execute("DELETE FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+                    cursor.execute("UPDATE vawc_logs SET is_deleted = 1 WHERE vawc_no = ?", (vawc_no,))
+                    from db import log_action
+                    log_action(self.username, "Delete Record (Soft)", target_record=vawc_no)
                 connection.commit()
-                cursor.close()
-                connection.close()
-                messagebox.showinfo("Success", f"{count} records deleted successfully.")
+                messagebox.showinfo("Success", f"{count} records moved to Trash.")
                 self.toggle_selection_mode()
+                self.load_data()
             except Exception as e:
                 messagebox.showerror("Error", str(e))
+            finally:
+                if connection:
+                    connection.close()
 
     def open_inline_edit(self, vawc_no=None):
         try:
@@ -416,7 +475,7 @@ class LogsTabFrame(ctk.CTkFrame):
 
 class InlineEditPanel(ctk.CTkFrame):
     def __init__(self, parent, vawc_no, username, on_save, on_cancel):
-        super().__init__(parent, fg_color="#f5f5f5")
+        super().__init__(parent, fg_color="transparent")
         self.vawc_no = vawc_no
         self.username = username
         self.on_save_callback = on_save
@@ -434,17 +493,17 @@ class InlineEditPanel(ctk.CTkFrame):
         self.setup_sticky_header()
 
         # Main scrollable container
-        self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="#f5f5f5")
+        self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
         self.setup_sticky_footer()
 
         # Form Card
-        self.form_card = ctk.CTkFrame(self.scroll_container, fg_color="white", corner_radius=15)
+        self.form_card = ctk.CTkFrame(self.scroll_container, fg_color=["white", "#242424"], corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
         self.form_card.pack(fill="x", padx=40, pady=10)
 
         # Header Banner
-        self.header_banner = ctk.CTkFrame(self.form_card, fg_color="#1a73e8", corner_radius=15, height=80)
+        self.header_banner = ctk.CTkFrame(self.form_card, fg_color="#1a2a4a", corner_radius=15, height=80)
         self.header_banner.pack(fill="x", padx=0, pady=0)
         self.header_banner.pack_propagate(False)
         
@@ -473,7 +532,7 @@ class InlineEditPanel(ctk.CTkFrame):
         self.btn_edit = ctk.CTkButton(self.edit_btn_container, text="📝 Edit Record", font=("Arial", 13, "bold"), fg_color="#1a2a4a", hover_color="#101a2e", height=40, width=140, command=lambda: self.set_editable(True))
 
     def setup_sticky_footer(self):
-        self.footer_actions = ctk.CTkFrame(self, fg_color="#ffffff", height=70, corner_radius=0)
+        self.footer_actions = ctk.CTkFrame(self, fg_color=["white", "#242424"], height=70, corner_radius=0, border_width=1, border_color=["#e2e8f0", "#333333"])
         self.footer_actions.pack(side="bottom", fill="x")
         
         inner_footer = ctk.CTkFrame(self.footer_actions, fg_color="transparent", corner_radius=0)
@@ -482,14 +541,30 @@ class InlineEditPanel(ctk.CTkFrame):
         self.btn_print = ctk.CTkButton(inner_footer, text="🖨 Print Record", font=("Arial", 13, "bold"), fg_color="#2c3e50", hover_color="#1a252f", height=40, width=140, command=self.print_record)
         self.btn_print.pack(side="left")
 
-        ctk.CTkButton(inner_footer, text="Back to Logs", font=("Arial", 13), fg_color="transparent", text_color="#333333", border_width=1, border_color="#cccccc", height=40, width=120, command=self.on_cancel_callback).pack(side="right")
+        ctk.CTkButton(inner_footer, text="Back to Logs", font=("Arial", 13), fg_color="transparent", text_color=["#333333", "#cbd5e1"], border_width=1, border_color=["#cccccc", "#555555"], height=40, width=120, command=self.on_cancel_callback).pack(side="right")
+
+    def on_status_change(self, *args):
+        if not hasattr(self, 'referred_entry'): return
+        
+        status = self.case_status_var.get()
+        is_referred = (status == "Referred")
+        
+        # In edit mode, enable/disable based on status
+        if self.is_editable:
+            if is_referred:
+                self.referred_entry.configure(state="normal", fg_color=["white", "#2b2b2b"], border_color="#1a2a4a")
+                self.referred_hint.pack_forget() # Hide hint when enabled
+            else:
+                self.referred_entry.delete(0, "end") # Clear if not referred
+                self.referred_entry.configure(state="disabled", fg_color=["#f1f5f9", "#1a1a1a"], border_color=["#e2e8f0", "#333333"])
+                self.referred_hint.pack(anchor="w") # Show hint when disabled in edit mode
 
     def set_editable(self, editable):
         self.is_editable = editable
         state = "normal" if editable else "disabled"
         
         # Update Header
-        self.header_banner.configure(fg_color="#1a73e8" if editable else "#1a2a4a")
+        self.header_banner.configure(fg_color=["#1a73e8", "#1e3a5f"] if editable else ["#1a2a4a", "#0f172a"])
         self.title_label.configure(text=f"{'Edit' if editable else 'Record Details'}: {self.vawc_no}")
         self.subtitle_label.configure(text="Update the information below and save changes" if editable else "Viewing record details")
 
@@ -505,6 +580,15 @@ class InlineEditPanel(ctk.CTkFrame):
         self.case_status_menu.configure(state=state)
         self.upload_btn.configure(state=state)
 
+        # Referred To field handling
+        if not editable:
+            # View mode: always disabled
+            self.referred_entry.configure(state="disabled", fg_color=["#f9f9f9", "#1a1a1a"], border_width=0, text_color=["#333333", "#cbd5e1"])
+            self.referred_hint.pack_forget()
+        else:
+            # Edit mode: call on_status_change to set correct state
+            self.on_status_change()
+
         # Update Checkboxes
         for var in self.abuse_vars.values():
             pill = var._pill_widget
@@ -513,9 +597,9 @@ class InlineEditPanel(ctk.CTkFrame):
                     widget.configure(state=state)
 
         # Style updates for better read-only view
-        input_bg = "white" if editable else "#f9f9f9"
+        input_bg = ["white", "#2b2b2b"] if editable else ["#f9f9f9", "#1a1a1a"]
         border_width = 2 if editable else 0
-        text_color = "black" if editable else "#333333"
+        text_color = ["black", "white"] if editable else ["#333333", "#cbd5e1"]
 
         for widget in [self.client_entry, self.birthdate_entry, self.age_entry, self.contact_entry, self.respondent_entry]:
             widget.configure(fg_color=input_bg, border_width=border_width, text_color=text_color)
@@ -535,22 +619,24 @@ class InlineEditPanel(ctk.CTkFrame):
             self.btn_edit.pack(side="right", padx=(10, 0))
 
     def load_record(self):
+        connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
             cursor.execute("SELECT * FROM vawc_logs WHERE vawc_no = ?", (self.vawc_no,))
             record = cursor.fetchone()
-            cursor.close()
-            connection.close()
             return record
         except Exception as e:
             messagebox.showerror("Error", str(e))
             return None
+        finally:
+            if connection:
+                connection.close()
 
     def setup_fields(self):
         # Re-using the same professional layout from AddRecordFrame
         def create_label(parent, text):
-            return ctk.CTkLabel(parent, text=text, font=("Arial", 11, "bold"), text_color="#1a2a4a", anchor="w")
+            return ctk.CTkLabel(parent, text=text, font=("Arial", 11, "bold"), text_color=["#1a2a4a", "#f8fafc"], anchor="w")
 
         # Row 1: Date | Client Name
         row1 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
@@ -566,7 +652,7 @@ class InlineEditPanel(ctk.CTkFrame):
         col1_2 = ctk.CTkFrame(row1, fg_color="transparent", corner_radius=0)
         col1_2.grid(row=0, column=1, sticky="nsew")
         create_label(col1_2, "Client Name").pack(fill="x")
-        self.client_entry = ctk.CTkEntry(col1_2, border_width=2, height=38, border_color="#dce4ee")
+        self.client_entry = ctk.CTkEntry(col1_2, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
         self.client_entry.pack(fill="x", pady=(5, 0))
 
         # Row 2: Birthdate | Age
@@ -577,7 +663,7 @@ class InlineEditPanel(ctk.CTkFrame):
         col2_1 = ctk.CTkFrame(row2, fg_color="transparent", corner_radius=0)
         col2_1.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
         create_label(col2_1, "Birthdate (MM/DD/YYYY)").pack(fill="x")
-        self.birthdate_entry = ctk.CTkEntry(col2_1, border_width=2, height=38, border_color="#dce4ee")
+        self.birthdate_entry = ctk.CTkEntry(col2_1, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
         self.birthdate_entry.pack(fill="x", pady=(5, 0))
         self.birthdate_entry.bind("<KeyRelease>", self.on_birthdate_key)
         self.birthdate_entry.bind("<FocusOut>", self.on_birthdate_focus_out)
@@ -585,7 +671,7 @@ class InlineEditPanel(ctk.CTkFrame):
         col2_2 = ctk.CTkFrame(row2, fg_color="transparent", corner_radius=0)
         col2_2.grid(row=0, column=1, sticky="nsew")
         create_label(col2_2, "Age").pack(fill="x")
-        self.age_entry = ctk.CTkEntry(col2_2, border_width=2, height=38, border_color="#dce4ee")
+        self.age_entry = ctk.CTkEntry(col2_2, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
         self.age_entry.pack(fill="x", pady=(5, 0))
 
         # Row 3: Contact | Address
@@ -596,20 +682,20 @@ class InlineEditPanel(ctk.CTkFrame):
         col3_1 = ctk.CTkFrame(row3, fg_color="transparent", corner_radius=0)
         col3_1.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
         create_label(col3_1, "Contact Information").pack(fill="x")
-        self.contact_entry = ctk.CTkEntry(col3_1, border_width=2, height=38, border_color="#dce4ee")
+        self.contact_entry = ctk.CTkEntry(col3_1, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
         self.contact_entry.pack(fill="x", pady=(5, 0))
 
         col3_2 = ctk.CTkFrame(row3, fg_color="transparent", corner_radius=0)
         col3_2.grid(row=0, column=1, sticky="nsew")
         create_label(col3_2, "Complete Address").pack(fill="x")
-        self.address_text = ctk.CTkTextbox(col3_2, height=38, border_width=2, border_color="#dce4ee")
+        self.address_text = ctk.CTkTextbox(col3_2, height=38, border_width=2, border_color=["#dce4ee", "#333333"])
         self.address_text.pack(fill="x", pady=(5, 0))
 
         # Row 4: Respondent
         row4 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
         row4.pack(fill="x", pady=10)
         create_label(row4, "Name of Respondent").pack(fill="x")
-        self.respondent_entry = ctk.CTkEntry(row4, border_width=2, height=38, border_color="#dce4ee")
+        self.respondent_entry = ctk.CTkEntry(row4, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
         self.respondent_entry.pack(fill="x", pady=(5, 0))
 
         # Row 5: Abuse Grid
@@ -626,10 +712,10 @@ class InlineEditPanel(ctk.CTkFrame):
         for i, abuse in enumerate(abuses):
             var = ctk.BooleanVar(value=False)
             self.abuse_vars[abuse] = var
-            pill = ctk.CTkFrame(abuse_grid, fg_color="white", border_width=1, border_color="#cccccc", corner_radius=20)
+            pill = ctk.CTkFrame(abuse_grid, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#cccccc", "#555555"], corner_radius=20)
             pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
             abuse_grid.grid_columnconfigure(i%4, weight=1)
-            cb = ctk.CTkCheckBox(pill, text=abuse, variable=var, text_color="black", checkbox_width=18, checkbox_height=18, command=lambda a=abuse, p=pill, v=var: self.update_pill_style(a, p, v))
+            cb = ctk.CTkCheckBox(pill, text=abuse, variable=var, text_color=["black", "white"], checkbox_width=18, checkbox_height=18, command=lambda a=abuse, p=pill, v=var: self.update_pill_style(a, p, v))
             cb.pack(padx=15, pady=8, side="left")
             var._pill_widget = pill # Store for direct updates
 
@@ -637,7 +723,7 @@ class InlineEditPanel(ctk.CTkFrame):
         row6 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
         row6.pack(fill="x", pady=10)
         create_label(row6, "Case Remarks / Notes").pack(fill="x")
-        self.remarks_text = ctk.CTkTextbox(row6, height=100, border_width=2, border_color="#dce4ee")
+        self.remarks_text = ctk.CTkTextbox(row6, height=100, border_width=2, border_color=["#dce4ee", "#333333"])
         self.remarks_text.pack(fill="x", pady=(5, 0))
 
         # Row 7: Case Status | Referred To
@@ -649,17 +735,22 @@ class InlineEditPanel(ctk.CTkFrame):
         col7_1.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
         create_label(col7_1, "Case Status").pack(fill="x")
         self.case_status_var = ctk.StringVar(value="Settled")
-        self.case_status_menu = ctk.CTkOptionMenu(col7_1, values=["Settled", "Issued BPO", "Ongoing", "Referred", "Archived"], 
+        self.case_status_menu = ctk.CTkOptionMenu(col7_1, values=["Ongoing", "Settled", "Issued BPO", "Referred"], 
                                                  variable=self.case_status_var, height=38, command=self.update_status_style)
         self.case_status_menu.pack(fill="x", pady=(5, 0))
+        # Add trace to handle referred_to field
+        self.case_status_var.trace_add("write", self.on_status_change)
 
         col7_2 = ctk.CTkFrame(row7, fg_color="transparent", corner_radius=0)
         col7_2.grid(row=0, column=1, sticky="nsew")
         create_label(col7_2, "Referred To (Agency)").pack(fill="x")
-        self.referred_to_var = ctk.StringVar()
-        self.referred_menu = ctk.CTkOptionMenu(col7_2, values=["None", "PNP (Police)", "MSWDO", "Hospital", "Court", "Other"], 
-                                              variable=self.referred_to_var, height=38)
-        self.referred_menu.pack(fill="x", pady=(5, 0))
+        self.referred_entry = ctk.CTkEntry(col7_2, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
+        self.referred_entry.pack(fill="x", pady=(5, 0))
+        
+        # Hint label for referred_to
+        self.referred_hint = ctk.CTkLabel(col7_2, text="Set Case Status to 'Referred' to enable this field", 
+                                          font=("Arial", 10), text_color="#94a3b8")
+        self.referred_hint.pack(anchor="w")
 
         # Row 8: Attachments
         row8 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
@@ -670,10 +761,10 @@ class InlineEditPanel(ctk.CTkFrame):
         self.thumbnail_frame = ctk.CTkFrame(row8, fg_color="transparent")
         self.thumbnail_frame.pack(fill="x", pady=(0, 10))
 
-        self.upload_area = ctk.CTkFrame(row8, fg_color="#f8f9fa", border_width=2, border_color="#dce4ee", corner_radius=10, height=60)
+        self.upload_area = ctk.CTkFrame(row8, fg_color=["#f8f9fa", "#1a1a1a"], border_width=2, border_color=["#dce4ee", "#333333"], corner_radius=10, height=60)
         self.upload_area.pack(fill="x")
         self.upload_area.pack_propagate(False)
-        self.upload_btn = ctk.CTkButton(self.upload_area, text="📎 Click to attach files", fg_color="transparent", text_color="#1a2a4a", command=self.select_attachments)
+        self.upload_btn = ctk.CTkButton(self.upload_area, text="📎 Click to attach files", fg_color="transparent", text_color=["#1a2a4a", "#cbd5e1"], command=self.select_attachments)
         self.upload_btn.pack(expand=True)
         self.file_list_frame = ctk.CTkFrame(row8, fg_color="transparent", corner_radius=0)
         self.file_list_frame.pack(fill="x", pady=5)
@@ -759,7 +850,11 @@ class InlineEditPanel(ctk.CTkFrame):
         self.remarks_text.insert("1.0", self.record[12] or "")
 
         # Referred To
-        self.referred_to_var.set(self.record[13] or "None")
+        self.referred_entry.configure(state="normal")
+        self.referred_entry.delete(0, "end")
+        self.referred_entry.insert(0, self.record[13] or "")
+        if not self.is_editable:
+            self.referred_entry.configure(state="disabled")
 
         # Status
         self.case_status_var.set(self.record[10] or "Settled")
@@ -877,18 +972,34 @@ class InlineEditPanel(ctk.CTkFrame):
                     pass
 
     def save(self):
+        connection = None
         try:
             date = self.date_entry.get_date()
             client = self.client_entry.get().strip()
             age = self.age_entry.get().strip()
             contact = self.contact_entry.get().strip()
-            birthdate = datetime.strptime(self.birthdate_entry.get(), "%m/%d/%Y").date() if self.birthdate_entry.get() else None
+            
+            # Better birthdate parsing
+            birthdate_str = self.birthdate_entry.get().strip()
+            birthdate = None
+            if birthdate_str:
+                for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y", "%Y-%m-%d"):
+                    try:
+                        birthdate = datetime.strptime(birthdate_str, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+            
             address = self.address_text.get("1.0", "end").strip()
             abuses = ", ".join([k for k, v in self.abuse_vars.items() if v.get()])
             respondent = self.respondent_entry.get().strip()
             remarks = self.remarks_text.get("1.0", "end").strip()
             status = self.case_status_var.get()
-            referred_to = self.referred_to_var.get()
+            referred_to = self.referred_entry.get().strip()
+
+            if not client:
+                messagebox.showerror("Error", "Client Name is required.")
+                return
 
             # Handle Attachments Vault
             vault_dir = os.path.join(os.getcwd(), "attachments")
@@ -924,9 +1035,6 @@ class InlineEditPanel(ctk.CTkFrame):
             # Log edit action
             from db import log_action
             log_action(self.username, "Edit Record", target_record=self.vawc_no, details=f"Status: {status}")
-
-            cursor.close()
-            connection.close()
             
             messagebox.showinfo("Success", "Record updated successfully.")
             
@@ -937,3 +1045,6 @@ class InlineEditPanel(ctk.CTkFrame):
                 self.set_editable(False)
         except Exception as e:
             messagebox.showerror("Error", str(e))
+        finally:
+            if connection:
+                connection.close()

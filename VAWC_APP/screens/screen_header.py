@@ -4,10 +4,10 @@ from PIL import Image
 
 class ScreenHeader(ctk.CTkFrame):
     def __init__(self, parent, title, actions=None):
-        super().__init__(parent, fg_color="#f5f5f5")
+        super().__init__(parent, fg_color="transparent")
         self.grid_columnconfigure(0, weight=1)
 
-        header_container = ctk.CTkFrame(self, fg_color="#f5f5f5")
+        header_container = ctk.CTkFrame(self, fg_color="transparent")
         header_container.grid(row=0, column=0, sticky="w", padx=20, pady=(20, 10))
 
         # Add Logo
@@ -24,10 +24,10 @@ class ScreenHeader(ctk.CTkFrame):
             except Exception:
                 pass
 
-        ctk.CTkLabel(header_container, text=title, font=("Arial", 22, "bold"), text_color="#1a2a4a").pack(side="left")
+        ctk.CTkLabel(header_container, text=title, font=("Arial", 22, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(side="left")
 
         if actions:
-            action_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
+            action_frame = ctk.CTkFrame(self, fg_color="transparent")
             action_frame.grid(row=0, column=1, sticky="e", padx=(0, 20))
             for action in actions:
                 button = ctk.CTkButton(

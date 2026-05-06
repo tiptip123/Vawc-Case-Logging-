@@ -1,8 +1,8 @@
 customtkinter
-mysql-connector-python
 bcrypt
 tkcalendar
 reportlab
 openpyxl
 Pillow
 matplotlib
+# Removed mysql-connector-python as it is not used in this project

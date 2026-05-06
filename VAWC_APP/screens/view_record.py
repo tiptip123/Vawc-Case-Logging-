@@ -15,7 +15,7 @@ class ViewRecordWindow(ctk.CTkToplevel):
         self.on_edit_saved = on_edit_saved
         self.title("View Record")
         self.attributes("-fullscreen", True)  # Always full screen
-        self.configure(fg_color="#f5f5f5")
+        self.configure(fg_color=["#f8fafc", "#1a1a1a"])
 
         # Always bring to front
         self.lift()
@@ -49,19 +49,22 @@ class ViewRecordWindow(ctk.CTkToplevel):
             ("Address", record[7] or ""),
             ("Type of Abuse", record[8] or ""),
             ("Case Status", record[10] or "Ongoing"),
+            ("Referred To", record[13] or ""),
             ("Attachments", record[11] or ""),
             ("Name of Respondent", record[9] or ""),
             ("Remarks", record[12] or "")
         ]
 
-        content_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
+        content_frame = ctk.CTkFrame(self, fg_color="transparent")
         content_frame.pack(fill="both", expand=True, padx=20, pady=(10, 10))
 
         for label, value in fields:
             item_frame = ctk.CTkFrame(
                 content_frame,
-                fg_color="#eef0f4",
-                corner_radius=6
+                fg_color=["white", "#242424"],
+                corner_radius=6,
+                border_width=1,
+                border_color=["#e2e8f0", "#333333"]
             )
             item_frame.pack(fill="x", pady=5)
 
@@ -70,7 +73,7 @@ class ViewRecordWindow(ctk.CTkToplevel):
                 item_frame,
                 text=f"{label}:",
                 font=("Arial", 12, "bold"),
-                text_color="#1a2a4a"
+                text_color=["#1a2a4a", "#f8fafc"]
             ).pack(side="left", padx=10, pady=10)
 
             # Value (Content)
@@ -78,13 +81,13 @@ class ViewRecordWindow(ctk.CTkToplevel):
                 item_frame,
                 text=value,
                 font=("Arial", 12),
-                text_color="#333333",  # FIX: darker readable text
+                text_color=["#333333", "#cbd5e1"],  # Readable in both modes
                 wraplength=350,
                 justify="left"
             ).pack(side="left", padx=10, pady=10)
 
         # Print Button and Close Button
-        button_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
+        button_frame = ctk.CTkFrame(self, fg_color="transparent")
         button_frame.pack(fill="x", padx=20, pady=(0, 20))
 
         self.btn_print = ctk.CTkButton(
@@ -120,10 +123,10 @@ class ViewRecordWindow(ctk.CTkToplevel):
         # Attachments Section
         attachments = record[11] or ""
         if attachments:
-            attachments_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
+            attachments_frame = ctk.CTkFrame(self, fg_color="transparent")
             attachments_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
-            ctk.CTkLabel(attachments_frame, text="📎 Attached Files", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(anchor="w", pady=(10, 15))
+            ctk.CTkLabel(attachments_frame, text="📎 Attached Files", font=("Arial", 14, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", pady=(10, 15))
 
             attachment_files = attachments.split(';')
             for file_path in attachment_files:
@@ -143,7 +146,7 @@ class ViewRecordWindow(ctk.CTkToplevel):
         file_ext = os.path.splitext(file_name)[1].lower()
 
         # Create attachment item frame
-        item_frame = ctk.CTkFrame(parent_frame, fg_color="white", corner_radius=8)
+        item_frame = ctk.CTkFrame(parent_frame, fg_color=["white", "#242424"], corner_radius=8)
         item_frame.pack(fill="x", pady=5, padx=10)
 
         # Check if it's an image file
@@ -156,16 +159,17 @@ class ViewRecordWindow(ctk.CTkToplevel):
                 photo = ImageTk.PhotoImage(image)
 
                 # Image label
-                img_label = tk.Label(item_frame, image=photo, bg="white")
+                is_dark = ctk.get_appearance_mode() == "Dark"
+                img_label = tk.Label(item_frame, image=photo, bg="#242424" if is_dark else "white")
                 img_label.image = photo  # Keep reference
                 img_label.pack(side="left", padx=10, pady=10)
 
                 # File info
-                info_frame = ctk.CTkFrame(item_frame, fg_color="white")
+                info_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
                 info_frame.pack(side="left", fill="both", expand=True, padx=(0, 10), pady=10)
 
-                ctk.CTkLabel(info_frame, text=file_name, font=("Arial", 12, "bold"), text_color="#1a2a4a").pack(anchor="w")
-                ctk.CTkLabel(info_frame, text=f"Size: {os.path.getsize(file_path)} bytes", font=("Arial", 10), text_color="#666666").pack(anchor="w")
+                ctk.CTkLabel(info_frame, text=file_name, font=("Arial", 12, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w")
+                ctk.CTkLabel(info_frame, text=f"Size: {os.path.getsize(file_path)} bytes", font=("Arial", 10), text_color=["#666666", "#999999"]).pack(anchor="w")
 
                 # Open button
                 ctk.CTkButton(info_frame, text="Open Image", fg_color="#8b0000", command=lambda: os.startfile(file_path)).pack(anchor="w", pady=(5, 0))
@@ -185,14 +189,14 @@ class ViewRecordWindow(ctk.CTkToplevel):
         icon_label.pack(side="left", padx=10, pady=10)
 
         # File info
-        info_frame = ctk.CTkFrame(parent_frame, fg_color="white")
+        info_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
         info_frame.pack(side="left", fill="both", expand=True, padx=(0, 10), pady=10)
 
-        ctk.CTkLabel(info_frame, text=file_name, font=("Arial", 12, "bold"), text_color="#1a2a4a").pack(anchor="w")
+        ctk.CTkLabel(info_frame, text=file_name, font=("Arial", 12, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w")
 
         if os.path.exists(file_path):
             file_size = os.path.getsize(file_path)
-            ctk.CTkLabel(info_frame, text=f"Size: {file_size} bytes", font=("Arial", 10), text_color="#666666").pack(anchor="w")
+            ctk.CTkLabel(info_frame, text=f"Size: {file_size} bytes", font=("Arial", 10), text_color=["#666666", "#999999"]).pack(anchor="w")
 
             # Open button
             ctk.CTkButton(info_frame, text="Open File", fg_color="#1a73e8", command=lambda: os.startfile(file_path)).pack(anchor="w", pady=(5, 0))

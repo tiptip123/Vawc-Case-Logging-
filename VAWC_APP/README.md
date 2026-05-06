@@ -46,7 +46,7 @@ If you don't have Python installed:
 
 ## 🛡️ Data Security
 
-- **Local Storage**: All data is stored locally in an SQLite database (`vawc.db`), ensuring no data leaves the Barangay premises.
+- **Local Storage**: All data is stored locally in an SQLite database (`vawc_db.sqlite`), ensuring no data leaves the Barangay premises.
 - **Password Security**: Uses `bcrypt` for industry-standard password hashing.
 - **Backup**: Regularly use the "Backup Database" feature in the Reports tab to save your data to an external drive.
 

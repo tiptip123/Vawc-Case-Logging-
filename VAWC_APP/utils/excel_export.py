@@ -4,46 +4,79 @@ from tkinter import filedialog
 import os
 from db import get_connection
 
-def export_to_excel():
+def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_year="", filter_month=""):
     filename = "VAWC_Records.xlsx"
     path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile=filename, filetypes=[("Excel files", "*.xlsx")])
     if not path:
         return
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "VAWC Logs"
+    
+    connection = None
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "VAWC Logs"
 
-    # Add title
-    ws.cell(row=1, column=1).value = "VAWC Case Logging System - Barangay Tankulan, Manolo Fortich, Bukidnon"
-    ws.cell(row=1, column=1).font = Font(bold=True, size=14)
+        # Add title
+        ws.cell(row=1, column=1).value = "REPUBLIC OF THE PHILIPPINES - BARANGAY TANKULAN - VAWC RECORDS"
+        ws.cell(row=1, column=1).font = Font(bold=True, size=14)
 
-    headers = ["VAWC No", "Date", "Client Name", "Age", "Contact", "Birthdate", "Address", "Type of Abuse", "Case Status", "Attachments", "Respondent", "Remarks"]
-    for col_num, header in enumerate(headers, 1):
-        cell = ws.cell(row=2, column=col_num)
-        cell.value = header
-        cell.font = Font(bold=True)
+        headers = ["VAWC No", "Date", "Client Name", "Age", "Contact", "Birthdate", "Address", "Type of Abuse", "Case Status", "Respondent", "Remarks", "Referred To"]
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=2, column=col_num)
+            cell.value = header
+            cell.font = Font(bold=True)
+            cell.fill = openpyxl.styles.PatternFill(start_color="1a2a4a", end_color="1a2a4a", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF")
 
-    connection = get_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, attachments, name_of_respondent, remarks FROM vawc_logs")
-    rows = cursor.fetchall()
-    cursor.close()
-    connection.close()
+        connection = get_connection()
+        cursor = connection.cursor()
+        
+        query = "SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, remarks, referred_to FROM vawc_logs WHERE is_deleted = 0"
+        params = []
+        
+        if search_term:
+            query += " AND (client_name LIKE ? OR vawc_no LIKE ? OR name_of_respondent LIKE ?)"
+            term = f"%{search_term}%"
+            params.extend([term, term, term])
+        if filter_abuse and filter_abuse != "Type of Abuse":
+            query += " AND type_of_abuse LIKE ?"
+            params.append(f"%{filter_abuse}%")
+        if filter_status and filter_status != "Status":
+            query += " AND case_status = ?"
+            params.append(filter_status)
+        if filter_year and filter_year != "Year":
+            query += " AND strftime('%Y', date) = ?"
+            params.append(filter_year)
+        if filter_month and filter_month != "Month":
+            query += " AND strftime('%m', date) = ?"
+            params.append(filter_month)
 
-    for row_num, row in enumerate(rows, 3):
-        for col_num, cell_value in enumerate(row, 1):
-            ws.cell(row=row_num, column=col_num).value = str(cell_value) if cell_value else ""
+        query += " ORDER BY date DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
 
-    for column in ws.columns:
-        max_length = 0
-        column_letter = column[0].column_letter
-        for cell in column:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
-        adjusted_width = (max_length + 2)
-        ws.column_dimensions[column_letter].width = adjusted_width
+        for row_num, row in enumerate(rows, 3):
+            for col_num, cell_value in enumerate(row, 1):
+                ws.cell(row=row_num, column=col_num).value = str(cell_value) if cell_value else ""
 
-    wb.save(path)
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50) # Cap width at 50
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        wb.save(path)
+        from tkinter import messagebox
+        messagebox.showinfo("Success", "Excel export completed successfully.")
+    except Exception as e:
+        from tkinter import messagebox
+        messagebox.showerror("Export Error", f"Failed to export to Excel: {str(e)}")
+    finally:
+        if connection:
+            connection.close()

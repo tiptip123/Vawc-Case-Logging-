@@ -5,16 +5,31 @@ from PIL import Image
 from auth import verify_login
 from .main_window import MainWindow
 
+from utils.helpers import load_config
+
 class LoginScreen(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("VAWC Case Logging System")
-        self.geometry("450x600")
+        self.config = load_config()
+        self.title(f"VAWC Case Logging System - {self.config['lgu_name']}")
+        self.geometry("1000x600")
         self.resizable(False, False)
-        self.configure(fg_color="#f5f5f5")
+        
+        # Apply theme
+        mode = self.config.get("appearance_mode", "light")
+        ctk.set_appearance_mode(mode)
+        
+        self.configure(fg_color=["white", "#1a1a1a"])
+        
+        # Center the window
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width // 2) - (1000 // 2)
+        y = (screen_height // 2) - (600 // 2)
+        self.geometry(f"1000x600+{x}+{y}")
 
-        # Main container to switch between login and forgot password
-        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
+        # Main container (Split layout)
+        self.main_container = ctk.CTkFrame(self, fg_color=["white", "#1a1a1a"], corner_radius=0)
         self.main_container.pack(fill="both", expand=True)
 
         self.show_login_view()
@@ -23,41 +38,57 @@ class LoginScreen(ctk.CTk):
         for widget in self.main_container.winfo_children():
             widget.destroy()
 
-        header_frame = ctk.CTkFrame(self.main_container, fg_color="#1a2a4a")
-        header_frame.pack(fill="x")
+        # Left Panel (40%) - Dark Navy
+        left_panel = ctk.CTkFrame(self.main_container, width=400, fg_color=["#0f1e35", "#0a1424"], corner_radius=0)
+        left_panel.pack(side="left", fill="both")
+        left_panel.pack_propagate(False)
 
-        # Logo in Login Header
-        logo_path = os.path.join(os.getcwd(), "logo", "tankulan.jpg")
-        if os.path.exists(logo_path):
-            try:
-                logo_image = ctk.CTkImage(
-                    light_image=Image.open(logo_path),
-                    dark_image=Image.open(logo_path),
-                    size=(40, 40)
-                )
-                ctk.CTkLabel(header_frame, image=logo_image, text="").pack(side="left", padx=(20, 0), pady=10)
-            except Exception:
-                pass
+        # Center content in left panel
+        left_content = ctk.CTkFrame(left_panel, fg_color="transparent")
+        left_content.place(relx=0.5, rely=0.5, anchor="center")
 
-        ctk.CTkLabel(header_frame, text="VAWC Case Logging System", font=("Arial", 18, "bold"), text_color="white").pack(padx=20, pady=20, side="left")
+        # Shield Logo
+        ctk.CTkLabel(left_content, text="🛡️", font=("Arial", 80)).pack(pady=(0, 20))
+        
+        ctk.CTkLabel(left_content, text="VAWC", font=("Arial", 32, "bold"), text_color="white").pack()
+        ctk.CTkLabel(left_content, text="Case Logging System", font=("Arial", 16), text_color="#94a3b8").pack(pady=(0, 40))
+        
+        ctk.CTkLabel(left_content, text=self.config['lgu_name'], font=("Arial", 14, "bold"), text_color="white").pack()
+        ctk.CTkLabel(left_content, text=f"{self.config['municipality']}, {self.config['province']}", font=("Arial", 12), text_color="#94a3b8").pack()
 
-        form_frame = ctk.CTkFrame(self.main_container, fg_color="#eef0f4")
-        form_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        # Bottom text in left panel
+        ctk.CTkFrame(left_panel, height=1, fg_color="#1e3a5f", width=300).place(relx=0.5, rely=0.9, anchor="center")
+        ctk.CTkLabel(left_panel, text="Republic of the Philippines", font=("Arial", 10), text_color="#64748b").place(relx=0.5, rely=0.93, anchor="center")
 
-        ctk.CTkLabel(form_frame, text="Username", anchor="w").pack(fill="x", padx=15, pady=(15, 2))
-        self.entry_username = ctk.CTkEntry(form_frame, placeholder_text="Enter your username", border_width=2, corner_radius=8)
-        self.entry_username.pack(padx=15, pady=(0, 10), fill="x")
+        # Right Panel (60%)
+        right_panel = ctk.CTkFrame(self.main_container, fg_color=["#f8fafc", "#1a1a1a"], corner_radius=0)
+        right_panel.pack(side="right", fill="both", expand=True)
 
-        ctk.CTkLabel(form_frame, text="Password", anchor="w").pack(fill="x", padx=15, pady=(0, 2))
-        self.entry_password = ctk.CTkEntry(form_frame, placeholder_text="Enter your password", show="*", border_width=2, corner_radius=8)
-        self.entry_password.pack(padx=15, pady=(0, 15), fill="x")
+        # Login Card
+        login_card = ctk.CTkFrame(right_panel, fg_color=["white", "#242424"], width=400, height=450, corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
+        login_card.place(relx=0.5, rely=0.5, anchor="center")
+        login_card.pack_propagate(False)
 
-        self.btn_login = ctk.CTkButton(form_frame, text="Login", fg_color="#8b0000", hover_color="#a50000", command=self.login)
-        self.btn_login.pack(padx=15, pady=(0, 10), fill="x")
+        ctk.CTkLabel(login_card, text="Welcome back", font=("Arial", 24, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(pady=(40, 5))
+        ctk.CTkLabel(login_card, text="Please enter your details", font=("Arial", 14), text_color=["#64748b", "#94a3b8"]).pack(pady=(0, 30))
 
-        # Forgot Password link
-        self.btn_forgot = ctk.CTkButton(form_frame, text="Forgot Password?", fg_color="transparent", text_color="#1a2a4a", hover_color="#d1d5db", font=("Arial", 11), command=self.open_forgot_password)
-        self.btn_forgot.pack(padx=15, pady=(0, 15))
+        # Form
+        form_inner = ctk.CTkFrame(login_card, fg_color="transparent")
+        form_inner.pack(fill="both", expand=True, padx=40)
+
+        ctk.CTkLabel(form_inner, text="Username", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"], anchor="w").pack(fill="x", pady=(0, 5))
+        self.entry_username = ctk.CTkEntry(form_inner, placeholder_text="Enter your username", height=45, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"], fg_color=["white", "#1a1a1a"], text_color=["#0f172a", "#f8fafc"])
+        self.entry_username.pack(fill="x", pady=(0, 20))
+
+        ctk.CTkLabel(form_inner, text="Password", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"], anchor="w").pack(fill="x", pady=(0, 5))
+        self.entry_password = ctk.CTkEntry(form_inner, placeholder_text="Enter your password", show="*", height=45, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"], fg_color=["white", "#1a1a1a"], text_color=["#0f172a", "#f8fafc"])
+        self.entry_password.pack(fill="x", pady=(0, 25))
+
+        self.btn_login = ctk.CTkButton(form_inner, text="Login", height=45, corner_radius=8, fg_color="#1a2a4a", hover_color="#0f1e35", font=("Arial", 14, "bold"), command=self.login)
+        self.btn_login.pack(fill="x", pady=(0, 15))
+
+        self.btn_forgot = ctk.CTkButton(form_inner, text="Forgot Password?", fg_color="transparent", text_color="#2563eb", hover_color=["#eff6ff", "#1e3a5f"], font=("Arial", 12), command=self.open_forgot_password)
+        self.btn_forgot.pack()
 
     def open_forgot_password(self):
         self.show_forgot_password_view()
@@ -70,19 +101,23 @@ class LoginScreen(ctk.CTk):
         wizard.pack(fill="both", expand=True)
 
     def login(self):
-        username = self.entry_username.get()
-        password = self.entry_password.get()
+        username = self.entry_username.get().strip()
+        password = self.entry_password.get().strip()
         if not username or not password:
             messagebox.showerror("Error", "Please enter username and password.")
             return
-        role = verify_login(username, password)
-        if role:
-            from db import log_action
-            log_action(username, "Login", details=f"Role: {role}")
-            self.destroy()
-            MainWindow(username, role).mainloop()
-        else:
-            messagebox.showerror("Error", "Invalid username or password.")
+            
+        try:
+            role = verify_login(username, password)
+            if role:
+                from db import log_action
+                log_action(username, "Login", details=f"Role: {role}")
+                self.destroy()
+                MainWindow(username, role).mainloop()
+            else:
+                messagebox.showerror("Error", "Invalid username or password.")
+        except Exception as e:
+            messagebox.showerror("Login Error", str(e))
 
 class ForgotPasswordWizard(ctk.CTkFrame):
     def __init__(self, parent, on_cancel):
@@ -183,10 +218,11 @@ class ForgotPasswordWizard(ctk.CTkFrame):
         ctk.CTkButton(back_cancel_frame, text="Cancel", width=100, fg_color="transparent", text_color="#666666", command=self.on_cancel_callback).pack(side="right", padx=40)
 
     def verify_passcode(self):
+        import bcrypt
         entered = self.entry_passcode.get().strip()
-        stored = self.user_data[5] # passcode column
+        stored_hash = self.user_data[5] # passcode column
 
-        if entered == stored:
+        if stored_hash and bcrypt.checkpw(entered.encode('utf-8'), stored_hash.encode('utf-8')):
             self.show_step_3()
         else:
             self.passcode_attempts += 1

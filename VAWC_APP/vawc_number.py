@@ -7,13 +7,12 @@ def generate_vawc_number(report_date=None):
     
     year = report_date.year
     prefix = f"VAWC-{year}-"
+    connection = None
     try:
         connection = get_connection()
         cursor = connection.cursor()
         cursor.execute("SELECT MAX(vawc_no) FROM vawc_logs WHERE vawc_no LIKE ?", (prefix + '%',))
         result = cursor.fetchone()
-        cursor.close()
-        connection.close()
         if result[0]:
             last_num = int(result[0].split('-')[-1])
             next_num = last_num + 1
@@ -22,3 +21,6 @@ def generate_vawc_number(report_date=None):
         return f"{prefix}{next_num:04d}"
     except Exception as e:
         raise Exception(f"VAWC number generation failed: {str(e)}")
+    finally:
+        if connection:
+            connection.close()

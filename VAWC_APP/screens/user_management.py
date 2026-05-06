@@ -1,147 +1,114 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 from db import get_connection
+from utils.helpers import make_circle_image
+import base64
+import io
+from PIL import Image, ImageTk, ImageDraw
 import bcrypt
 
 class UserManagementFrame(ctk.CTkFrame):
     def __init__(self, parent):
-        super().__init__(parent, fg_color="#f5f5f5")
+        super().__init__(parent, fg_color="transparent")
         self.setup_ui()
 
     def setup_ui(self):
-        # Clear existing widgets if any
+        # Clear existing widgets
         for widget in self.winfo_children():
             widget.destroy()
 
-        # Load user statistics
+        # Stats Cards
+        self.stats_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.stats_frame.pack(fill="x", padx=20, pady=(20, 10))
+        self.stats_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
         self.load_user_stats()
+        self.create_stat_card(self.stats_frame, 0, 0, "Total Users", str(self.total_users), "#2563eb", "👥")
+        self.create_stat_card(self.stats_frame, 0, 1, "Admins", str(self.admin_count), "#8b0000", "🛡️")
+        self.create_stat_card(self.stats_frame, 0, 2, "Staff", str(self.staff_count), "#1e3a5f", "👤")
 
-        # Statistics Cards
-        stats_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
-        stats_frame.pack(fill="x", padx=20, pady=(10, 5))
-        stats_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        # User Table Card
+        table_card = ctk.CTkFrame(self, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        table_card.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # Total Users Card
-        total_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
-        total_card.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(total_card, text="👥 Total Users", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
-        ctk.CTkLabel(total_card, text=str(self.total_users), font=("Arial", 24, "bold"), text_color="#8b0000").pack(pady=(0, 15))
+        # Toolbar
+        toolbar = ctk.CTkFrame(table_card, fg_color="transparent", height=60)
+        toolbar.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkButton(toolbar, text="➕ Add New User", fg_color="#1a2a4a", hover_color="#0f1e35", 
+                      height=38, corner_radius=8, font=("Arial", 13, "bold"), command=self.add_user).pack(side="left")
+        
+        btn_actions = ctk.CTkFrame(toolbar, fg_color="transparent")
+        btn_actions.pack(side="right")
+        
+        ctk.CTkButton(btn_actions, text="📝 Edit User", fg_color="transparent", text_color=["#2563eb", "#60a5fa"], 
+                      border_width=1, border_color=["#e2e8f0", "#333333"], height=38, corner_radius=8, command=self.edit_user).pack(side="left", padx=5)
+        
+        ctk.CTkButton(btn_actions, text="🗑 Delete", fg_color="transparent", text_color="#dc2626", 
+                      border_width=1, border_color=["#fecaca", "#991b1b"], height=38, corner_radius=8, command=self.delete_user).pack(side="left", padx=5)
 
-        # Admin Users Card
-        admin_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
-        admin_card.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(admin_card, text="👑 Admin Users", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
-        ctk.CTkLabel(admin_card, text=str(self.admin_count), font=("Arial", 24, "bold"), text_color="#1a73e8").pack(pady=(0, 15))
+        # Main Table Area
+        self.container = ctk.CTkFrame(table_card, fg_color="transparent")
+        self.container.pack(fill="both", expand=True)
 
-        # Staff Users Card
-        staff_card = ctk.CTkFrame(stats_frame, fg_color="white", corner_radius=10)
-        staff_card.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
-        ctk.CTkLabel(staff_card, text="👤 Staff Users", font=("Arial", 14, "bold"), text_color="#1a2a4a").pack(pady=(15, 5))
-        ctk.CTkLabel(staff_card, text=str(self.staff_count), font=("Arial", 24, "bold"), text_color="#28a745").pack(pady=(0, 15))
+        self.show_table_view()
 
-        # Users Table Section
-        table_frame = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
-        table_frame.pack(fill="both", expand=True, padx=20, pady=(5, 10))
+    def show_table_view(self):
+        for widget in self.container.winfo_children(): widget.destroy()
 
-        ctk.CTkLabel(table_frame, text="📋 User Accounts", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(anchor="w", padx=20, pady=(20, 10))
+        # Treeview (Professional Style)
+        table_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
-        # STYLE FIX (IMPORTANT)
         style = ttk.Style()
-        style.theme_use("default")
+        tree_bg = "#ffffff" if ctk.get_appearance_mode() == "Light" else "#2b2b2b"
+        tree_fg = "#000000" if ctk.get_appearance_mode() == "Light" else "#ffffff"
+        style.configure("User.Treeview", background=tree_bg, foreground=tree_fg, rowheight=40, fieldbackground=tree_bg, font=("Arial", 11), borderwidth=0)
+        style.map("User.Treeview", background=[("selected", "#1a2a4a")], foreground=[("selected", "#ffffff")])
+        
+        # Heading configuration
+        heading_bg = "#f1f5f9" if not is_dark else "#1a1a1a"
+        style.configure("User.Treeview.Heading", background=heading_bg, foreground=tree_fg, font=("Arial", 11, "bold"), borderwidth=0)
 
-        style.configure(
-            "Treeview",
-            background="#ffffff",
-            foreground="#000000",  # FIX: readable text
-            rowheight=32,
-            fieldbackground="#ffffff",
-            font=("Arial", 10)
-        )
-
-        style.map(
-            "Treeview",
-            background=[("selected", "#8b0000")],
-            foreground=[("selected", "#ffffff")]
-        )
-
-        style.configure(
-            "Treeview.Heading",
-            background="#1a2a4a",
-            foreground="#ffffff",
-            font=("Arial", 12, "bold"),
-            padding=(10, 5)
-        )
-
-        self.tree = ttk.Treeview(
-            table_frame,
-            columns=("Username", "Full Name", "Role"),
-            show="headings",
-            selectmode="browse"
-        )
-
+        self.tree = ttk.Treeview(table_frame, columns=("Username", "Full Name", "Role", "Status"), show="headings", selectmode="browse", style="User.Treeview")
+        
+        self.tree.heading("Username", text="USERNAME")
+        self.tree.heading("Full Name", text="FULL NAME")
+        self.tree.heading("Role", text="ROLE")
+        # Configure tags with single strings
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        self.tree.tag_configure("evenrow", background="#242424" if is_dark else "#ffffff", foreground="#ffffff" if is_dark else "#000000")
+        self.tree.tag_configure("oddrow", background="#1e1e1e" if is_dark else "#f8fafc", foreground="#ffffff" if is_dark else "#000000")
+        
         for col in self.tree["columns"]:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=180, anchor="center")
+            self.tree.column(col, anchor="w", width=200)
 
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        # Custom Scrollbar
+        scrollbar = ctk.CTkScrollbar(table_frame, orientation="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
-
-        self.tree.pack(side="left", fill="both", expand=True, padx=(20, 5), pady=(0, 20))
-        scrollbar.pack(side="right", fill="y", padx=(5, 20), pady=(0, 20))
+        
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         self.load_users()
 
-        # Action Buttons Section
-        actions_frame = ctk.CTkFrame(self, fg_color="#f5f5f5")
-        actions_frame.pack(fill="x", padx=20, pady=(0, 20))
-
-        # Left side buttons
-        left_buttons = ctk.CTkFrame(actions_frame, fg_color="#f5f5f5")
-        left_buttons.pack(side="left")
-
-        self.btn_add = ctk.CTkButton(
-            left_buttons,
-            text="➕ Add User",
-            fg_color="#28a745",
-            hover_color="#218838",
-            command=self.add_user,
-            height=40,
-            font=("Arial", 11, "bold")
-        )
-        self.btn_add.pack(side="left", padx=(0, 10), pady=5)
-
-        # Right side buttons
-        right_buttons = ctk.CTkFrame(actions_frame, fg_color="#f5f5f5")
-        right_buttons.pack(side="right")
-
-        self.btn_change_pass = ctk.CTkButton(
-            right_buttons,
-            text="🔑 Change Password",
-            fg_color="#1a73e8",
-            hover_color="#1967d2",
-            command=self.change_password,
-            height=40,
-            font=("Arial", 11, "bold")
-        )
-        self.btn_change_pass.pack(side="right", padx=(10, 0), pady=5)
-
-        self.btn_delete = ctk.CTkButton(
-            right_buttons,
-            text="🗑️ Delete User",
-            fg_color="#dc3545",
-            hover_color="#c82333",
-            command=self.delete_user,
-            height=40,
-            font=("Arial", 11, "bold")
-        )
-        self.btn_delete.pack(side="right", padx=(10, 0), pady=5)
+    def create_stat_card(self, parent, row, col, label, value, color, icon):
+        card = ctk.CTkFrame(parent, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        card.grid(row=row, column=col, padx=10, pady=5, sticky="nsew")
+        
+        accent = ctk.CTkFrame(card, width=4, fg_color=color, corner_radius=2)
+        accent.place(relx=0, rely=0.2, relheight=0.6)
+        
+        ctk.CTkLabel(card, text=icon, font=("Arial", 20)).place(relx=0.9, rely=0.2, anchor="center")
+        ctk.CTkLabel(card, text=label, font=("Arial", 12), text_color=["#64748b", "#94a3b8"]).pack(pady=(20, 0), padx=20, anchor="w")
+        ctk.CTkLabel(card, text=value, font=("Arial", 24, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(pady=(5, 20), padx=20, anchor="w")
 
     def refresh(self):
         """Refresh user management data and UI"""
         self.setup_ui()
 
     def load_user_stats(self):
+        connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
@@ -157,17 +124,18 @@ class UserManagementFrame(ctk.CTkFrame):
             # Staff count
             cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'Staff'")
             self.staff_count = cursor.fetchone()[0]
-
-            cursor.close()
-            connection.close()
         except Exception:
             self.total_users = 0
             self.admin_count = 0
             self.staff_count = 0
+        finally:
+            if connection:
+                connection.close()
 
     def load_users(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
+        connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
@@ -177,77 +145,348 @@ class UserManagementFrame(ctk.CTkFrame):
             # Alternating row colors
             for i, row in enumerate(rows):
                 tag = "evenrow" if i % 2 == 0 else "oddrow"
-                self.tree.insert("", "end", values=row, tags=(tag,))
+                self.tree.insert("", "end", values=row + ("Active",), tags=(tag,))
 
-            self.tree.tag_configure("evenrow", background="#ffffff")
-            self.tree.tag_configure("oddrow", background="#eef0f4")
-
-            cursor.close()
-            connection.close()
+            # Tag configuration moved to show_table_view to handle themes correctly
         except Exception as e:
             messagebox.showerror("Error", str(e))
+        finally:
+            if connection:
+                connection.close()
 
     def add_user(self):
-        AddUserDialog(self, on_save=self.refresh)
+        for widget in self.winfo_children(): widget.destroy()
+        AddUserPanel(self, on_save=self.setup_ui, on_cancel=self.setup_ui)
 
     def delete_user(self):
         item = self.tree.selection()
         if not item:
+            messagebox.showwarning("Warning", "Please select a user to delete.")
             return
         username = self.tree.item(item[0], "values")[0]
-        if messagebox.askyesno("Confirm", f"Delete user {username}?"):
-            try:
-                connection = get_connection()
-                cursor = connection.cursor()
-                cursor.execute("DELETE FROM users WHERE username = ?", (username,))
-                connection.commit()
-                cursor.close()
-                connection.close()
-                self.refresh()
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+        
+        # Security: Prevent deleting protected users or own account
+        if username == "admin":
+             messagebox.showerror("Restricted", "The default admin account cannot be deleted.")
+             return
 
-    def change_password(self):
+        # Use SettingsFrame for inline confirmation if available
+        settings = self.winfo_toplevel().current_frame
+        if hasattr(settings, 'show_confirmation_banner'):
+            settings.show_confirmation_banner(f"Are you sure you want to delete user {username}?", 
+                                               lambda: self.do_delete(username))
+        else:
+            if messagebox.askyesno("Confirm", f"Delete user {username}?"):
+                self.do_delete(username)
+
+    def do_delete(self, username):
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+            connection.commit()
+            
+            settings = self.winfo_toplevel().current_frame
+            if hasattr(settings, 'show_banner'):
+                settings.show_banner(f"User {username} deleted successfully.", "success", parent=self)
+            else:
+                messagebox.showinfo("Success", f"User {username} deleted.")
+                
+            self.refresh()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        finally:
+            if connection:
+                connection.close()
+
+    def edit_user(self):
         item = self.tree.selection()
         if not item:
+            messagebox.showwarning("Warning", "Please select a user to edit.")
             return
         username = self.tree.item(item[0], "values")[0]
-        AdminResetDialog(self, username, on_save=self.refresh)
+        
+        # Switch to inline edit panel
+        for widget in self.winfo_children(): widget.destroy()
+        EditUserPanel(self, username, on_cancel=self.setup_ui, on_save=self.setup_ui)
 
-class AdminResetDialog(ctk.CTkToplevel):
+class EditUserPanel(ctk.CTkScrollableFrame):
+    def __init__(self, parent, username, on_cancel, on_save):
+        super().__init__(parent, fg_color="transparent")
+        self.target_username = username
+        self.on_cancel = on_cancel
+        self.on_save = on_save
+        self.profile_pic_base64 = None
+        self.pack(fill="both", expand=True)
+        
+        # Add a local back button for User Management
+        ctk.CTkButton(self, text="← Back to User List", command=self.on_cancel, 
+                      fg_color="transparent", text_color=["#1a2a4a", "#cbd5e1"], hover_color=["#eeeeee", "#333333"],
+                      font=("Arial", 12, "bold"), width=140).pack(anchor="w", padx=40, pady=(20, 0))
+
+        self.user_data = self.load_user_data()
+        if not self.user_data:
+            self.on_cancel()
+            return
+            
+        self.setup_ui()
+
+    def load_user_data(self):
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = ?", (self.target_username,))
+            return cursor.fetchone()
+        finally:
+            if connection: connection.close()
+
+    def setup_ui(self):
+        # Two-column layout in a more compact container
+        container = ctk.CTkFrame(self, fg_color=["white", "#242424"], corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
+        container.pack(fill="x", padx=40, pady=20)
+        
+        container.grid_columnconfigure(0, weight=1) # Left: Profile
+        container.grid_columnconfigure(1, weight=1) # Right: Security
+        
+        # Left Section: Profile
+        left_sec = ctk.CTkFrame(container, fg_color="transparent")
+        left_sec.grid(row=0, column=0, padx=40, pady=30, sticky="nsew")
+        
+        ctk.CTkLabel(left_sec, text="👤 Profile Settings", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", pady=(0, 20))
+        
+        # Avatar Preview (Circular 128x128)
+        self.avatar_size = 128
+        self.avatar_frame = ctk.CTkFrame(left_sec, width=self.avatar_size, height=self.avatar_size, corner_radius=self.avatar_size//2, fg_color=["#f1f5f9", "#1a1a1a"])
+        self.avatar_frame.pack(pady=10)
+        self.avatar_frame.pack_propagate(False)
+        
+        self.avatar_label = ctk.CTkLabel(self.avatar_frame, text="")
+        self.avatar_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Load existing pic
+        self.profile_pic_base64 = self.user_data[11] # profile_picture column (base64 string)
+        self.refresh_avatar_display()
+
+        # Change Photo Button
+        ctk.CTkButton(left_sec, text="📷 Change Photo", fg_color="#1a2a4a", height=32, width=140, command=self.upload_pic).pack(pady=10)
+
+        # Fields
+        ctk.CTkLabel(left_sec, text="Full Name", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
+        self.entry_fullname = ctk.CTkEntry(left_sec, height=40)
+        self.entry_fullname.insert(0, self.user_data[3] or "")
+        self.entry_fullname.pack(fill="x")
+
+        ctk.CTkLabel(left_sec, text="Username", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
+        self.entry_username = ctk.CTkEntry(left_sec, height=40)
+        self.entry_username.insert(0, self.user_data[1])
+        self.entry_username.pack(fill="x")
+
+        # Right Section: Security
+        right_sec = ctk.CTkFrame(container, fg_color="transparent")
+        right_sec.grid(row=0, column=1, padx=40, pady=30, sticky="nsew")
+        
+        ctk.CTkLabel(right_sec, text="🔒 Security Settings", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", pady=(0, 20))
+
+        # Password (Optional)
+        ctk.CTkLabel(right_sec, text="New Password (Leave blank to keep current)", font=("Arial", 11), anchor="w").pack(fill="x", pady=(0, 2))
+        self.entry_pass = ctk.CTkEntry(right_sec, height=40, show="*")
+        self.entry_pass.pack(fill="x")
+
+        self.entry_confirm = ctk.CTkEntry(right_sec, height=40, show="*", placeholder_text="Confirm New Password")
+        self.entry_confirm.pack(fill="x", pady=10)
+
+        # Passcode
+        ctk.CTkLabel(right_sec, text="6-Digit Recovery Passcode", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
+        self.entry_passcode = ctk.CTkEntry(right_sec, height=40, placeholder_text="Enter new 6-digit passcode")
+        self.entry_passcode.pack(fill="x")
+
+        # Security Question
+        ctk.CTkLabel(right_sec, text="Security Question", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
+        self.questions = [
+            "What is the name of your elementary school?",
+            "What is your mother's maiden name?",
+            "What was your first pet's name?",
+            "In what city were you born?",
+            "What is your favorite book?"
+        ]
+        self.sec_var = ctk.StringVar(value=self.user_data[6] or self.questions[0])
+        self.sec_combo = ctk.CTkComboBox(right_sec, values=self.questions, variable=self.sec_var, height=40)
+        self.sec_combo.pack(fill="x")
+
+        self.entry_answer = ctk.CTkEntry(right_sec, height=40, placeholder_text="Security Answer")
+        self.entry_answer.pack(fill="x", pady=10)
+
+        # Footer Actions
+        footer = ctk.CTkFrame(container, fg_color="transparent")
+        footer.grid(row=1, column=0, columnspan=2, pady=20)
+        
+        ctk.CTkButton(footer, text="Save Changes", fg_color="#1a2a4a", height=42, width=160, font=("Arial", 13, "bold"), command=self.save).pack(side="left", padx=10)
+        ctk.CTkButton(footer, text="Cancel", fg_color="transparent", text_color=["#64748b", "#94a3b8"], border_width=1, border_color=["#e2e8f0", "#333333"], height=42, width=120, command=self.on_cancel).pack(side="left", padx=10)
+
+    def upload_pic(self):
+        file_path = filedialog.askopenfilename(
+            title="Choose Profile Picture",
+            filetypes=[
+                ("Image Files", "*.png *.jpg *.jpeg *.gif *.bmp"),
+                ("All Files", "*.*")
+            ]
+        )
+        if not file_path:
+            return
+            
+        try:
+            # Open, resize, and convert to base64
+            img = Image.open(file_path).convert("RGBA")
+            # Create square crop first
+            w, h = img.size
+            min_dim = min(w, h)
+            left = (w - min_dim)/2
+            top = (h - min_dim)/2
+            right = (w + min_dim)/2
+            bottom = (h + min_dim)/2
+            img = img.crop((left, top, right, bottom)).resize((256, 256), Image.Resampling.LANCZOS)
+            
+            # Save to base64 string
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            self.profile_pic_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            
+            # Refresh preview
+            self.refresh_avatar_display()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to process image: {e}")
+
+    def refresh_avatar_display(self):
+        # Clear existing
+        for w in self.avatar_frame.winfo_children(): w.destroy()
+        
+        self.avatar_img = make_circle_image(self.profile_pic_base64, size=self.avatar_size)
+        
+        if self.avatar_img:
+            ctk.CTkLabel(self.avatar_frame, image=self.avatar_img, text="").place(relx=0.5, rely=0.5, anchor="center")
+        else:
+            # Initials placeholder
+            fullname = self.entry_fullname.get().strip() or self.target_username
+            initial = fullname[0].upper() if fullname else "?"
+            ctk.CTkLabel(self.avatar_frame, text=initial, font=("Arial", 32, "bold"), text_color=["#1a2a4a", "#f8fafc"]).place(relx=0.5, rely=0.5, anchor="center")
+
+    def save(self):
+        fullname = self.entry_fullname.get().strip()
+        username = self.entry_username.get().strip()
+        new_pass = self.entry_pass.get().strip()
+        confirm = self.entry_confirm.get().strip()
+        passcode = self.entry_passcode.get().strip()
+        sec_q = self.sec_var.get()
+        sec_a = self.entry_answer.get().strip()
+
+        if not fullname or not username:
+            messagebox.showwarning("Error", "Full Name and Username are required.")
+            return
+
+        # Password validation if changed
+        if new_pass:
+            if new_pass != confirm:
+                messagebox.showerror("Error", "Passwords do not match.")
+                return
+            if len(new_pass) < 8 or not any(c.isupper() for c in new_pass) or not any(c.isdigit() for c in new_pass):
+                messagebox.showerror("Security", "Password must be 8+ chars with uppercase and number.")
+                return
+
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            
+            # Check username uniqueness if changed
+            if username != self.target_username:
+                cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+                if cursor.fetchone():
+                    messagebox.showerror("Error", "Username already taken.")
+                    return
+
+            # Update basic info
+            cursor.execute("""
+                UPDATE users 
+                SET full_name = ?, username = ?, profile_picture = ?, security_question = ?
+                WHERE username = ?
+            """, (fullname, username, self.profile_pic_base64, sec_q, self.target_username))
+
+            # Update password if provided
+            if new_pass:
+                hashed = bcrypt.hashpw(new_pass.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed, username))
+
+            # Update passcode if provided
+            if passcode:
+                hashed_pc = bcrypt.hashpw(passcode.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                cursor.execute("UPDATE users SET passcode = ? WHERE username = ?", (hashed_pc, username))
+
+            # Update security answer if provided
+            if sec_a:
+                hashed_sa = bcrypt.hashpw(sec_a.lower().encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                cursor.execute("UPDATE users SET security_answer = ? WHERE username = ?", (hashed_sa, username))
+
+            connection.commit()
+            
+            # Show inline success message instead of messagebox
+            # We'll need to reach back to SettingsFrame for show_banner
+            settings = self.winfo_toplevel().current_frame
+            if hasattr(settings, 'show_banner'):
+                settings.show_banner(f"User {username} updated successfully.", "success", parent=self)
+            else:
+                messagebox.showinfo("Success", f"User {username} updated successfully.")
+            
+            # Update sidebar if editing own profile
+            main_window = self.winfo_toplevel()
+            if hasattr(main_window, 'setup_sidebar_user_info') and self.target_username == main_window.username:
+                main_window.username = username # Update current username reference
+                main_window.setup_sidebar_user_info()
+
+            self.on_save()
+            self.on_cancel() # Return to list after save
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        finally:
+            if connection: connection.close()
+
+class ResetPasswordDialog(ctk.CTkToplevel):
     def __init__(self, parent, target_username, on_save):
         super().__init__(parent)
         self.title("Reset User Password")
-        self.geometry("450x400")
+        self.geometry("450x450")
         self.target_username = target_username
         self.on_save = on_save
         self.user_data = self.load_user_data()
         self.grab_set()
         self.resizable(False, False)
         
-        self.configure(fg_color="#f5f5f5")
+        self.configure(fg_color=["#f8fafc", "#1a1a1a"])
         
         # Container
-        self.container = ctk.CTkFrame(self, fg_color="white", corner_radius=15)
+        self.container = ctk.CTkFrame(self, fg_color=["white", "#242424"], corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
         self.container.pack(fill="both", expand=True, padx=20, pady=20)
         
         self.show_verification_step()
 
     def load_user_data(self):
+        connection = None
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
+            connection = get_connection()
+            cursor = connection.cursor()
             cursor.execute("SELECT * FROM users WHERE username = ?", (self.target_username,))
             data = cursor.fetchone()
-            cursor.close()
-            conn.close()
             return data
         except: return None
+        finally:
+            if connection:
+                connection.close()
 
     def show_verification_step(self):
         for w in self.container.winfo_children(): w.destroy()
         
-        ctk.CTkLabel(self.container, text=f"Verify to Reset: {self.target_username}", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=20)
+        ctk.CTkLabel(self.container, text=f"Verify to Reset: {self.target_username}", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=20)
         
         ctk.CTkLabel(self.container, text="Enter the user's 6-digit passcode:", anchor="w", font=("Arial", 11)).pack(fill="x", padx=40, pady=(10, 2))
         self.entry_verify_pass = ctk.CTkEntry(self.container, height=40, show="*")
@@ -258,7 +497,10 @@ class AdminResetDialog(ctk.CTkToplevel):
         ctk.CTkButton(self.container, text="Use Security Question instead", fg_color="transparent", text_color="#1a73e8", font=("Arial", 11), command=self.show_security_step).pack(pady=5)
 
     def verify_passcode(self):
-        if self.entry_verify_pass.get() == self.user_data[5]:
+        entered = self.entry_verify_pass.get().strip()
+        stored_hash = self.user_data[5] # passcode column
+        
+        if stored_hash and bcrypt.checkpw(entered.encode('utf-8'), stored_hash.encode('utf-8')):
             self.show_reset_step()
         else:
             messagebox.showerror("Error", "Incorrect passcode.")
@@ -266,7 +508,7 @@ class AdminResetDialog(ctk.CTkToplevel):
     def show_security_step(self):
         for w in self.container.winfo_children(): w.destroy()
         
-        ctk.CTkLabel(self.container, text="Security Verification", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=20)
+        ctk.CTkLabel(self.container, text="Security Verification", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=20)
         
         question = self.user_data[6] or "No security question set."
         ctk.CTkLabel(self.container, text=question, font=("Arial", 12, "bold"), wraplength=350).pack(pady=10)
@@ -276,7 +518,7 @@ class AdminResetDialog(ctk.CTkToplevel):
         
         ctk.CTkButton(self.container, text="Verify Answer", fg_color="#1a2a4a", command=self.verify_security).pack(fill="x", padx=40, pady=10)
         
-        ctk.CTkButton(self.container, text="← Back", fg_color="transparent", text_color="#666666", command=self.show_verification_step).pack(pady=5)
+        ctk.CTkButton(self.container, text="← Back", fg_color="transparent", text_color=["#666666", "#94a3b8"], command=self.show_verification_step).pack(pady=5)
 
     def verify_security(self):
         answer = self.entry_verify_sec.get().strip().lower()
@@ -289,7 +531,7 @@ class AdminResetDialog(ctk.CTkToplevel):
     def show_reset_step(self):
         for w in self.container.winfo_children(): w.destroy()
         
-        ctk.CTkLabel(self.container, text="Set New Password", font=("Arial", 16, "bold"), text_color="#1a2a4a").pack(pady=20)
+        ctk.CTkLabel(self.container, text="Set New Password", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=20)
         
         self.entry_new_p1 = ctk.CTkEntry(self.container, height=40, placeholder_text="New Password", show="*")
         self.entry_new_p1.pack(fill="x", padx=40, pady=10)
@@ -297,7 +539,7 @@ class AdminResetDialog(ctk.CTkToplevel):
         self.entry_new_p2 = ctk.CTkEntry(self.container, height=40, placeholder_text="Confirm Password", show="*")
         self.entry_new_p2.pack(fill="x", padx=40, pady=10)
         
-        ctk.CTkButton(self.container, text="Reset Password", fg_color="#28a745", command=self.do_reset).pack(fill="x", padx=40, pady=20)
+        ctk.CTkButton(self.container, text="Reset Password", fg_color="#16a34a", command=self.do_reset).pack(fill="x", padx=40, pady=20)
 
     def do_reset(self):
         p1 = self.entry_new_p1.get()
@@ -319,103 +561,128 @@ class AdminResetDialog(ctk.CTkToplevel):
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-class AddUserDialog(ctk.CTkToplevel):
-    def __init__(self, parent, on_save):
-        super().__init__(parent)
-        self.title("Add New User")
-        self.geometry("500x750")
+class AddUserPanel(ctk.CTkFrame):
+    def __init__(self, parent, on_save, on_cancel):
+        super().__init__(parent, fg_color="transparent")
         self.on_save = on_save
-        self.resizable(False, False)
-        self.grab_set()
+        self.on_cancel = on_cancel
+        self.pack(fill="both", expand=True)
 
-        self.configure(fg_color="#f5f5f5")
+        # Back Button
+        ctk.CTkButton(self, text="← Back to User List", command=self.on_cancel, 
+                      fg_color="transparent", text_color=["#1a2a4a", "#cbd5e1"], hover_color=["#eeeeee", "#333333"],
+                      font=("Arial", 12, "bold"), width=140).pack(anchor="w", padx=40, pady=(15, 0))
 
-        # Container
-        container = ctk.CTkFrame(self, fg_color="white", corner_radius=15)
-        container.pack(fill="both", expand=True, padx=20, pady=20)
+        # Compact Container
+        container = ctk.CTkFrame(self, fg_color=["white", "#242424"], corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
+        container.pack(fill="x", padx=40, pady=15)
+        
+        # Header
+        ctk.CTkLabel(container, text="👤 Create User Account", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=15)
 
-        ctk.CTkLabel(container, text="👤 Create User Account", font=("Arial", 18, "bold"), text_color="#1a2a4a").pack(pady=20)
+        # Form Grid
+        form_grid = ctk.CTkFrame(container, fg_color="transparent")
+        form_grid.pack(fill="x", padx=30, pady=10)
+        form_grid.grid_columnconfigure((0, 1), weight=1)
+        
+        self.entries = {}
+        self.error_labels = {}
 
-        # Fields
-        self.create_field(container, "Username", "entry_username")
-        self.create_field(container, "Full Name", "entry_full_name")
-        self.create_field(container, "Password", "entry_password", show="*")
+        self.create_field_grid(form_grid, "Username", "username", 0, 0)
+        self.create_field_grid(form_grid, "Full Name", "full_name", 0, 1)
+        self.create_field_grid(form_grid, "Password", "password", 1, 0, show="*")
         
         # Passcode
-        ctk.CTkLabel(container, text="Passcode (6-digit numeric)", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
-        self.entry_passcode = ctk.CTkEntry(container, placeholder_text="e.g. 123456", height=40)
-        self.entry_passcode.pack(fill="x", padx=30, pady=(0, 10))
+        pc_frame = ctk.CTkFrame(form_grid, fg_color="transparent")
+        pc_frame.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(pc_frame, text="6-Digit Passcode *", anchor="w", font=("Arial", 11, "bold")).pack(fill="x")
+        self.entry_passcode = ctk.CTkEntry(pc_frame, placeholder_text="e.g. 123456", height=38)
+        self.entry_passcode.pack(fill="x", pady=(2, 0))
+        self.entries["passcode"] = self.entry_passcode
+        self.error_labels["passcode"] = ctk.CTkLabel(pc_frame, text="", text_color="#dc2626", font=("Arial", 10))
+        self.error_labels["passcode"].pack(anchor="w")
 
         # Role
-        ctk.CTkLabel(container, text="Role", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
+        role_frame = ctk.CTkFrame(form_grid, fg_color="transparent")
+        role_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(role_frame, text="Role *", anchor="w", font=("Arial", 11, "bold")).pack(fill="x")
         self.role_var = ctk.StringVar(value="Staff")
-        self.role_menu = ctk.CTkOptionMenu(container, values=["Staff", "Admin"], variable=self.role_var, height=40, fg_color="#1a2a4a")
-        self.role_menu.pack(fill="x", padx=30, pady=(0, 10))
-
-        # Security Question
-        ctk.CTkLabel(container, text="Security Question", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
-        self.questions = [
-            "What is your favorite food?",
-            "What is your mother's maiden name?",
-            "What is your pet's name?",
-            "What is your best friend's name?",
-            "What is the name of your elementary school?"
-        ]
-        self.question_var = ctk.StringVar(value=self.questions[0])
-        self.question_menu = ctk.CTkOptionMenu(container, values=self.questions, variable=self.question_var, height=40, fg_color="#1a2a4a")
-        self.question_menu.pack(fill="x", padx=30, pady=(0, 10))
+        self.role_menu = ctk.CTkOptionMenu(role_frame, values=["Staff", "Admin"], variable=self.role_var, height=38, fg_color="#1a2a4a")
+        self.role_menu.pack(fill="x", pady=(2, 0))
 
         # Security Answer
-        ctk.CTkLabel(container, text="Security Answer", anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
-        self.entry_answer = ctk.CTkEntry(container, placeholder_text="Your answer here", height=40)
-        self.entry_answer.pack(fill="x", padx=30, pady=(0, 20))
+        self.create_field_grid(form_grid, "Security Answer", "answer", 2, 1)
 
         # Buttons
-        btn_frame = ctk.CTkFrame(container, fg_color="transparent")
-        btn_frame.pack(fill="x", side="bottom", pady=20)
+        btn_container = ctk.CTkFrame(container, fg_color="transparent")
+        btn_container.pack(fill="x", padx=30, pady=25)
+        
+        ctk.CTkButton(btn_container, text="Create User", fg_color="#1a2a4a", hover_color="#0f1e35", 
+                      height=42, corner_radius=8, font=("Arial", 13, "bold"), command=self.save_user).pack(side="left", fill="x", expand=True, padx=(0, 10))
 
-        ctk.CTkButton(btn_frame, text="Cancel", fg_color="#6c757d", hover_color="#5a6268", command=self.destroy, width=120).pack(side="left", padx=(30, 0))
-        ctk.CTkButton(btn_frame, text="Create User", fg_color="#28a745", hover_color="#218838", command=self.save_user, width=150).pack(side="right", padx=(0, 30))
+        ctk.CTkButton(btn_container, text="Cancel", fg_color="transparent", text_color=["#333333", "#cbd5e1"],
+                      border_width=1, border_color=["#cccccc", "#555555"], height=42, corner_radius=8, command=self.on_cancel).pack(side="right", fill="x", expand=True)
 
-    def create_field(self, parent, label, attr_name, show=None):
-        ctk.CTkLabel(parent, text=label, anchor="w", font=("Arial", 11, "bold")).pack(fill="x", padx=30, pady=(10, 2))
-        entry = ctk.CTkEntry(parent, placeholder_text=f"Enter {label.lower()}", height=40, show=show)
-        entry.pack(fill="x", padx=30, pady=(0, 10))
-        setattr(self, attr_name, entry)
+    def create_field_grid(self, parent, label, attr_name, row, col, show=None):
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.grid(row=row, column=col, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(frame, text=f"{label} *", anchor="w", font=("Arial", 11, "bold")).pack(fill="x")
+        entry = ctk.CTkEntry(frame, placeholder_text=f"Enter {label.lower()}", height=38, show=show)
+        entry.pack(fill="x", pady=(2, 0))
+        self.entries[attr_name] = entry
+        err_label = ctk.CTkLabel(frame, text="", text_color="#dc2626", font=("Arial", 10))
+        err_label.pack(anchor="w")
+        self.error_labels[attr_name] = err_label
 
     def save_user(self):
-        username = self.entry_username.get().strip()
-        full_name = self.entry_full_name.get().strip()
-        password = self.entry_password.get().strip()
-        passcode = self.entry_passcode.get().strip()
-        role = self.role_var.get()
-        question = self.question_var.get()
-        answer = self.entry_answer.get().strip().lower()
+        for key in self.entries:
+            self.entries[key].configure(border_color=["#dce4ee", "#333333"])
+            self.error_labels[key].configure(text="")
 
-        if not all([username, full_name, password, passcode, answer]):
-            messagebox.showerror("Error", "All fields are required.")
-            return
+        data = {k: v.get().strip() for k, v in self.entries.items()}
+        data['role'] = self.role_var.get()
 
-        if not passcode.isdigit() or len(passcode) > 6:
-            messagebox.showerror("Error", "Passcode must be numeric and max 6 digits.")
+        has_error = False
+        for field in ["username", "full_name", "password", "passcode", "answer"]:
+            if not data[field]:
+                self.entries[field].configure(border_color="#dc2626")
+                self.error_labels[field].configure(text="Required")
+                has_error = True
+
+        if has_error: return
+
+        if not data['passcode'].isdigit() or len(data['passcode']) != 6:
+            self.entries['passcode'].configure(border_color="#dc2626")
+            self.error_labels['passcode'].configure(text="Must be 6 digits")
             return
 
         try:
-            hashed_pass = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            hashed_answer = bcrypt.hashpw(answer.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
             connection = get_connection()
             cursor = connection.cursor()
+            cursor.execute("SELECT id FROM users WHERE username = ?", (data['username'],))
+            if cursor.fetchone():
+                self.entries['username'].configure(border_color="#dc2626")
+                self.error_labels['username'].configure(text="Already taken")
+                connection.close()
+                return
+
+            hashed_pass = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            hashed_pc = bcrypt.hashpw(data['passcode'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            hashed_ans = bcrypt.hashpw(data['answer'].lower().encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
             cursor.execute("""
-                INSERT INTO users (username, password_hash, full_name, role, passcode, security_question, security_answer)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (username, hashed_pass, full_name, role, passcode, question, hashed_answer))
+                INSERT INTO users (username, password_hash, full_name, role, passcode, security_answer)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (data['username'], hashed_pass, data['full_name'], data['role'], hashed_pc, hashed_ans))
+            
             connection.commit()
             cursor.close()
             connection.close()
             
-            messagebox.showinfo("Success", "User account created successfully.")
+            settings = self.winfo_toplevel().current_frame
+            if hasattr(settings, 'show_banner'):
+                settings.show_banner(f"User {data['username']} created.", "success", parent=self.master)
+            
             self.on_save()
-            self.destroy()
         except Exception as e:
             messagebox.showerror("Error", str(e))
