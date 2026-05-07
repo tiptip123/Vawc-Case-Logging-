@@ -2,7 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 import os
 from PIL import Image
-from auth import verify_login
+from auth import authenticate_user
 from .main_window import MainWindow
 
 from utils.helpers import load_config
@@ -108,14 +108,15 @@ class LoginScreen(ctk.CTk):
             return
             
         try:
-            role = verify_login(username, password)
-            if role:
+            success, result = authenticate_user(username, password)
+            if success:
+                role = result
                 from db import log_action
                 log_action(username, "Login", details=f"Role: {role}")
                 self.destroy()
                 MainWindow(username, role).mainloop()
             else:
-                messagebox.showerror("Error", "Invalid username or password.")
+                messagebox.showerror("Error", result)
         except Exception as e:
             messagebox.showerror("Login Error", str(e))
 
@@ -180,20 +181,23 @@ class ForgotPasswordWizard(ctk.CTkFrame):
         if not username: return
 
         from db import get_connection
+        import sqlite3
+        conn = None
         try:
             conn = get_connection()
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
             self.user_data = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
             if self.user_data:
                 self.show_step_2()
             else:
                 messagebox.showerror("Error", "Username not found.")
         except Exception as e:
             messagebox.showerror("Error", str(e))
+        finally:
+            if conn:
+                conn.close()
 
     def show_step_2(self):
         self.current_step = 2
@@ -220,7 +224,7 @@ class ForgotPasswordWizard(ctk.CTkFrame):
     def verify_passcode(self):
         import bcrypt
         entered = self.entry_passcode.get().strip()
-        stored_hash = self.user_data[5] # passcode column
+        stored_hash = self.user_data['passcode']
 
         if stored_hash and bcrypt.checkpw(entered.encode('utf-8'), stored_hash.encode('utf-8')):
             self.show_step_3()
@@ -239,7 +243,7 @@ class ForgotPasswordWizard(ctk.CTkFrame):
 
         ctk.CTkLabel(self.card, text="🛡 Security Question", font=("Arial", 18, "bold"), text_color="#1a2a4a").pack(pady=(30, 10))
         
-        question = self.user_data[6] or "Security question not set."
+        question = self.user_data['security_question'] or "Security question not set."
         ctk.CTkLabel(self.card, text=question, font=("Arial", 13, "bold"), text_color="#333333", wraplength=350).pack(pady=10)
 
         self.entry_sec_answer = ctk.CTkEntry(self.card, placeholder_text="Your answer", height=45, border_width=2)
@@ -256,7 +260,7 @@ class ForgotPasswordWizard(ctk.CTkFrame):
     def verify_security_answer(self):
         import bcrypt
         entered = self.entry_sec_answer.get().strip().lower()
-        stored_hash = self.user_data[7]
+        stored_hash = self.user_data['security_answer']
 
         if stored_hash and bcrypt.checkpw(entered.encode('utf-8'), stored_hash.encode('utf-8')):
             self.show_step_3()
@@ -304,16 +308,17 @@ class ForgotPasswordWizard(ctk.CTkFrame):
 
         import bcrypt
         from db import get_connection
+        conn = None
         try:
             hashed = bcrypt.hashpw(p1.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed, self.user_data[1]))
+            cursor.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed, self.user_data['username']))
             conn.commit()
-            cursor.close()
-            conn.close()
-
             messagebox.showinfo("Success", "Password has been reset successfully. Please login with your new password.")
             self.on_cancel_callback()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+        finally:
+            if conn:
+                conn.close()

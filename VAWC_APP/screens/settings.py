@@ -7,6 +7,11 @@ import sys
 import subprocess
 from datetime import datetime
 
+import threading
+import requests
+import zipfile
+import io
+
 class SettingsFrame(ctk.CTkFrame):
     def __init__(self, parent, user_role, main_window):
         super().__init__(parent, fg_color="transparent")
@@ -210,10 +215,10 @@ class SettingsFrame(ctk.CTkFrame):
         # Update & About
         self.create_card(
             row_offset + 1, 0,
-            "🔄", "System Update",
-            f"Version: {self.current_version}",
-            "Install Update",
-            self.install_update
+            "🌐", "Online Update",
+            f"Check for updates on GitHub.",
+            "Check for Updates",
+            self.check_online_update
         )
 
         self.create_card(
@@ -233,6 +238,9 @@ class SettingsFrame(ctk.CTkFrame):
             self.confirm_logout,
             is_danger=True
         )
+
+    def check_online_update(self):
+        self.show_panel(OnlineUpdatePanel, current_version=self.current_version, settings_frame=self)
 
     def show_appearance_settings(self):
         self.show_panel(AppearancePanel, main_window=self.main_window)
@@ -336,24 +344,43 @@ class DatabaseSettingsPanel(ctk.CTkFrame):
 class DeletedRecordsPanel(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
-        self.settings = parent.master
+        self.settings = parent # parent is SettingsFrame
         
         ctk.CTkLabel(self, text="Soft-Deleted Records", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
+        # Search Bar for Trash
+        search_frame = ctk.CTkFrame(self, fg_color="transparent")
+        search_frame.pack(fill="x", padx=40, pady=(0, 10))
+        
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="🔍 Search trash by name or VAWC No...", height=38)
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.search_entry.bind("<KeyRelease>", lambda e: self.load_trash())
+        
+        ctk.CTkButton(search_frame, text="Clear", width=80, height=38, fg_color="transparent", 
+                      text_color=["#64748b", "#94a3b8"], border_width=1, border_color=["#e2e8f0", "#333333"],
+                      command=self.clear_search).pack(side="right")
+
         self.table_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
         from tkinter import ttk
         style = ttk.Style()
         # Theme-aware treeview
-        tree_bg = "#ffffff" if ctk.get_appearance_mode() == "Light" else "#2b2b2b"
-        tree_fg = "#000000" if ctk.get_appearance_mode() == "Light" else "#ffffff"
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        tree_bg = "#ffffff" if not is_dark else "#2b2b2b"
+        tree_fg = "#000000" if not is_dark else "#ffffff"
         style.configure("Trash.Treeview", rowheight=35, background=tree_bg, foreground=tree_fg, fieldbackground=tree_bg)
+        style.map("Trash.Treeview", background=[("selected", "#1a2a4a")], foreground=[("selected", "#ffffff")])
         
         self.tree = ttk.Treeview(self.table_frame, columns=("VAWC No", "Client Name", "Date Deleted"), show="headings", style="Trash.Treeview")
         self.tree.heading("VAWC No", text="VAWC NO")
         self.tree.heading("Client Name", text="CLIENT NAME")
         self.tree.heading("Date Deleted", text="DATE DELETED")
+        
+        self.tree.column("VAWC No", width=150, anchor="center")
+        self.tree.column("Client Name", width=250, anchor="w")
+        self.tree.column("Date Deleted", width=150, anchor="center")
+        
         self.tree.pack(side="left", fill="both", expand=True)
         
         scrollbar = ctk.CTkScrollbar(self.table_frame, orientation="vertical", command=self.tree.yview)
@@ -362,17 +389,29 @@ class DeletedRecordsPanel(ctk.CTkFrame):
                     
         self.load_trash()
         
-        ctk.CTkButton(self, text="♻️ Restore Selected Record", fg_color="#16a34a", height=45, corner_radius=8,
+        ctk.CTkButton(self, text="♻️ Restore Selected Record", fg_color="#16a34a", hover_color="#15803d", height=45, corner_radius=8, font=("Arial", 13, "bold"),
                       command=self.confirm_restore).pack(pady=20, padx=40, fill="x")
+
+    def clear_search(self):
+        self.search_entry.delete(0, "end")
+        self.load_trash()
 
     def load_trash(self):
         from db import get_connection
+        search_term = self.search_entry.get().strip()
         for item in self.tree.get_children(): self.tree.delete(item)
         connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("SELECT vawc_no, client_name, updated_at FROM vawc_logs WHERE is_deleted = 1")
+            query = "SELECT vawc_no, client_name, updated_at FROM vawc_logs WHERE is_deleted = 1"
+            params = []
+            if search_term:
+                query += " AND (vawc_no LIKE ? OR client_name LIKE ?)"
+                params = [f"%{search_term}%", f"%{search_term}%"]
+            
+            query += " ORDER BY updated_at DESC"
+            cursor.execute(query, params)
             for row in cursor.fetchall():
                 self.tree.insert("", "end", values=row)
         finally:
@@ -380,19 +419,26 @@ class DeletedRecordsPanel(ctk.CTkFrame):
 
     def confirm_restore(self):
         item = self.tree.selection()
-        if not item: return
+        if not item:
+            messagebox.showwarning("Warning", "Please select a record to restore.")
+            return
         vawc_no = self.tree.item(item[0], "values")[0]
         self.settings.show_confirmation_banner(f"Are you sure you want to restore record {vawc_no}?", 
                                                lambda: self.restore(vawc_no), parent=self)
 
     def restore(self, vawc_no):
-        from db import get_connection
+        from db import get_connection, log_action
         connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("UPDATE vawc_logs SET is_deleted = 0 WHERE vawc_no = ?", (vawc_no,))
+            cursor.execute("UPDATE vawc_logs SET is_deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?", (vawc_no,))
             connection.commit()
+            
+            # Log the restoration
+            username = self.settings.main_window.username
+            log_action(username, "Restore Record", target_record=vawc_no, details="Restored from Trash")
+            
             self.load_trash()
             self.settings.show_banner(f"Record {vawc_no} restored successfully.", parent=self)
         except Exception as e:
@@ -433,6 +479,174 @@ class AboutPanel(ctk.CTkScrollableFrame):
         ]
         for right in rights:
             ctk.CTkLabel(rights_frame, text=right, font=("Arial", 12), text_color="#333333", anchor="w").pack(padx=10, pady=2, fill="x")
+
+class OnlineUpdatePanel(ctk.CTkFrame):
+    def __init__(self, parent, current_version, settings_frame):
+        super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
+        self.current_version = current_version
+        self.settings = settings_frame
+        self.repo = self.settings.main_window.config.get("github_repo", "yourusername/vawc_app_repo")
+        
+        ctk.CTkLabel(self, text="Online System Update", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
+        
+        self.info_frame = ctk.CTkFrame(self, fg_color=["#f8f9fa", "#1a1a1a"], corner_radius=10)
+        self.info_frame.pack(fill="x", padx=40, pady=20)
+        
+        self.version_label = ctk.CTkLabel(self.info_frame, text=f"Current Version: v{self.current_version}", font=("Arial", 14, "bold"), text_color=["#0f172a", "#f8fafc"])
+        self.version_label.pack(pady=(20, 5))
+
+        self.status_label = ctk.CTkLabel(self.info_frame, text="Ready to check for updates", font=("Arial", 12), text_color=["#64748b", "#94a3b8"])
+        self.status_label.pack(pady=(0, 20))
+        
+        self.btn_check = ctk.CTkButton(self, text="🔍 Check for Updates", fg_color="#1a2a4a", height=45, corner_radius=8,
+                                       command=self.start_check)
+        self.btn_check.pack(fill="x", padx=40, pady=(10, 5))
+
+        self.btn_offline = ctk.CTkButton(self, text="📁 Install Update from Local File (.zip)", 
+                                         fg_color="transparent", border_width=1, 
+                                         text_color=["#1a2a4a", "#cbd5e1"],
+                                         height=45, corner_radius=8,
+                                         command=self.select_offline_update)
+        self.btn_offline.pack(fill="x", padx=40, pady=(5, 10))
+
+        self.progress_bar = ctk.CTkProgressBar(self, height=10, corner_radius=5)
+        self.progress_bar.set(0)
+
+    def start_check(self):
+        self.btn_check.configure(state="disabled", text="Checking...")
+        self.status_label.configure(text=f"Connecting to GitHub: {self.repo}")
+        threading.Thread(target=self.check_github, daemon=True).start()
+
+    def select_offline_update(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Zip files", "*.zip")])
+        if file_path:
+            self.process_local_zip(file_path)
+
+    def process_local_zip(self, zip_path):
+        try:
+            temp_dir = os.path.join(os.getcwd(), "temp_update")
+            if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+            os.makedirs(temp_dir)
+            
+            with zipfile.ZipFile(zip_path, 'r') as z:
+                z.extractall(temp_dir)
+            
+            # Smartly find the application root inside the extracted files
+            src_root = temp_dir
+            new_version = "Unknown"
+            
+            for root, dirs, fnames in os.walk(temp_dir):
+                if "main.py" in fnames or "update_manifest.json" in fnames:
+                    src_root = root
+                    # Try to get version from version.txt in the zip
+                    version_path = os.path.join(root, "version.txt")
+                    if os.path.exists(version_path):
+                        with open(version_path, "r") as f:
+                            new_version = f.read().strip()
+                    break
+            
+            files = []
+            for root, dirs, fnames in os.walk(src_root):
+                for f in fnames:
+                    rel = os.path.relpath(os.path.join(root, f), src_root)
+                    files.append(rel)
+            
+            if messagebox.askyesno("Confirm Update", f"Install offline update (Version: {new_version})?"):
+                self.settings.perform_update(src_root, new_version, files, parent=self)
+            else:
+                if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+                
+        except Exception as e:
+            messagebox.showerror("Update Error", f"Failed to process local update: {str(e)}")
+
+    def check_github(self):
+        try:
+            # GitHub API for latest release
+            url = f"https://api.github.com/repos/{self.repo}/releases/latest"
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                latest_v = data.get("tag_name", "0.0.0").replace("v", "")
+                
+                if self.is_newer(latest_v, self.current_version):
+                    assets = data.get("assets", [])
+                    zip_asset = next((a for a in assets if a["name"].endswith(".zip")), None)
+                    
+                    if zip_asset:
+                        self.after(0, lambda: self.prompt_update(latest_v, data.get("body", ""), zip_asset["browser_download_url"]))
+                    else:
+                        self.after(0, lambda: self.status_label.configure(text="No update package (.zip) found in latest release.", text_color="#dc2626"))
+                else:
+                    self.after(0, lambda: self.status_label.configure(text=f"System is up to date (v{self.current_version})", text_color="#16a34a"))
+            else:
+                self.after(0, lambda: self.status_label.configure(text=f"Error: Repository not found or private.", text_color="#dc2626"))
+        except Exception as e:
+            self.after(0, lambda: self.status_label.configure(text=f"Connection Error: {str(e)}", text_color="#dc2626"))
+        finally:
+            self.after(0, lambda: self.btn_check.configure(state="normal", text="🔍 Check for Updates"))
+
+    def is_newer(self, v1, v2):
+        try:
+            return [int(x) for x in v1.split(".")] > [int(x) for x in v2.split(".")]
+        except: return False
+
+    def prompt_update(self, version, changelog, download_url):
+        self.status_label.configure(text=f"New version v{version} available!", text_color="#16a34a")
+        if messagebox.askyesno("Update Available", f"A new version (v{version}) is available.\n\nChanges:\n{changelog}\n\nWould you like to download and install it now?"):
+            self.start_download(download_url, version)
+
+    def start_download(self, url, version):
+        self.btn_check.pack_forget()
+        self.progress_bar.pack(fill="x", padx=40, pady=20)
+        self.status_label.configure(text="Downloading update package...")
+        threading.Thread(target=self.download_and_extract, args=(url, version), daemon=True).start()
+
+    def download_and_extract(self, url, version):
+        try:
+            response = requests.get(url, stream=True)
+            total_size = int(response.headers.get('content-length', 0))
+            
+            bytes_downloaded = 0
+            zip_buffer = io.BytesIO()
+            
+            for data in response.iter_content(chunk_size=4096):
+                bytes_downloaded += len(data)
+                zip_buffer.write(data)
+                if total_size > 0:
+                    progress = bytes_downloaded / total_size
+                    self.after(0, lambda p=progress: self.progress_bar.set(p))
+            
+            self.after(0, lambda: self.status_label.configure(text="Download complete. Preparing files..."))
+            
+            # Extract to temporary folder
+            temp_dir = os.path.join(os.getcwd(), "temp_update")
+            if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+            os.makedirs(temp_dir)
+            
+            with zipfile.ZipFile(zip_buffer) as z:
+                z.extractall(temp_dir)
+            
+            # Map files from extraction (handling optional subfolder in zip)
+            files_to_update = []
+            extracted_files = []
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(full_path, temp_dir)
+                    # If zip contains a subfolder like 'vawc-app-master/', strip it
+                    if "/" in rel_path or "\\" in rel_path:
+                        parts = rel_path.replace("\\", "/").split("/", 1)
+                        if len(parts) > 1:
+                            rel_path = parts[1]
+                    
+                    files_to_update.append(rel_path)
+            
+            self.after(0, lambda: self.settings.perform_update(temp_dir, version, files_to_update, parent=self))
+            
+        except Exception as e:
+            self.after(0, lambda: messagebox.showerror("Download Error", f"Failed to download update: {str(e)}"))
+            self.after(0, self.settings.setup_main_view)
 
 class UpdatePanel(ctk.CTkFrame):
     def __init__(self, parent, current_version, settings_frame):
@@ -486,19 +700,35 @@ class UpdatePanel(ctk.CTkFrame):
             return False
 
     def perform_update(self, update_dir, new_version, files, parent=None):
-        backup_dir = os.path.join(os.getcwd(), "backup", datetime.now().strftime("%Y_%m_%d_%H%M%S"))
+        timestamp = datetime.now().strftime("%Y_%m_%d_%H%M%S")
+        backups_root = os.path.join(os.getcwd(), "backups")
+        backup_dir = os.path.join(backups_root, f"before_v{new_version}_{timestamp}")
         os.makedirs(backup_dir, exist_ok=True)
         
+        # Cleanup old backups (keep last 3)
+        try:
+            all_backups = sorted([os.path.join(backups_root, d) for d in os.listdir(backups_root) if os.path.isdir(os.path.join(backups_root, d))], key=os.path.getmtime)
+            while len(all_backups) > 3:
+                shutil.rmtree(all_backups.pop(0))
+        except: pass
+
         copied_files = []
         try:
-            # Check if all files are writable before starting
+            # 1. PRE-UPDATE DATABASE BACKUP (CRITICAL for data preservation)
+            db_file = "vawc_db.sqlite"
+            if os.path.exists(db_file):
+                shutil.copy2(db_file, os.path.join(backup_dir, db_file))
+                print(f"Database backed up to {backup_dir}")
+
+            # 2. Check if all files are writable before starting
             for rel_path in files:
+                # Handle path mapping: the manifest might use relative paths from project root
                 dst_path = os.path.join(os.getcwd(), rel_path)
                 if os.path.exists(dst_path):
                     if not os.access(dst_path, os.W_OK):
-                        raise Exception(f"File is locked or not writable: {rel_path}. Please close any other programs using it.")
+                        raise Exception(f"File is locked: {rel_path}. Please close the application and try again.")
 
-            # Backup
+            # 3. Backup existing files
             for rel_path in files:
                 src_path = os.path.join(os.getcwd(), rel_path)
                 if os.path.exists(src_path):
@@ -506,55 +736,43 @@ class UpdatePanel(ctk.CTkFrame):
                     os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                     shutil.copy2(src_path, dst_path)
 
-            # Copy New Files with a small delay for stability
+            # 4. Copy New Files
             for rel_path in files:
-                src_path = os.path.join(update_dir, rel_path)
-                dst_path = os.path.join(os.getcwd(), rel_path)
+                # Logic to find the file in update_dir (it might be flat or nested)
+                update_src = os.path.join(update_dir, os.path.basename(rel_path))
+                if not os.path.exists(update_src):
+                    # Try nested path
+                    update_src = os.path.join(update_dir, rel_path)
                 
-                if not os.path.exists(src_path):
+                if not os.path.exists(update_src):
                     raise Exception(f"Update file missing in source: {rel_path}")
                 
-                # If file exists, try to rename it first (safer than direct overwrite)
-                temp_path = None
-                if os.path.exists(dst_path):
-                    temp_path = dst_path + ".old"
-                    try:
-                        if os.path.exists(temp_path): os.remove(temp_path)
-                        os.rename(dst_path, temp_path)
-                    except:
-                        pass # If rename fails, we'll try direct copy
-                
+                dst_path = os.path.join(os.getcwd(), rel_path)
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-                shutil.copy2(src_path, dst_path)
                 
-                # Cleanup temp file
-                if temp_path and os.path.exists(temp_path):
-                    try: os.remove(temp_path)
-                    except: pass
-                    
+                # Copy with metadata preserved
+                shutil.copy2(update_src, dst_path)
                 copied_files.append(rel_path)
 
-            # Update version file
-            with open(self.version_file, "w") as f:
+            # 5. Update version file explicitly in the root if not in manifest
+            version_txt = os.path.join(os.getcwd(), "version.txt")
+            with open(version_txt, "w") as f:
                 f.write(new_version)
 
-            # Show inline success with restart option
-            self.show_confirmation_banner("Update installed successfully. Restart the application to apply changes?", 
-                                           self.restart_app, type="warning", parent=parent)
+            # Show success
+            self.settings.show_banner(f"Update to v{new_version} complete! Restart recommended.", parent=self)
+            self.show_confirmation_banner("Restart application now?", self.restart_app, type="warning", parent=self)
 
         except Exception as e:
-            # Restore from backup
+            # ROLLBACK
+            print(f"Update failed: {e}. Starting rollback...")
             for rel_path in copied_files:
                 backup_file = os.path.join(backup_dir, rel_path)
                 original_file = os.path.join(os.getcwd(), rel_path)
                 if os.path.exists(backup_file):
-                    try:
-                        os.makedirs(os.path.dirname(original_file), exist_ok=True)
-                        shutil.copy2(backup_file, original_file)
-                    except:
-                        pass
+                    shutil.copy2(backup_file, original_file)
             
-            self.settings.show_banner(f"Update failed: {str(e)}. Previous version restored.", type="error", parent=parent)
+            self.settings.show_banner(f"Update failed: {str(e)}. System restored to previous state.", type="error", parent=self)
 
     def confirm_logout(self):
         self.settings.show_confirmation_banner("Are you sure you want to logout?", 

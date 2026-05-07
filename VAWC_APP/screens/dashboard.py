@@ -178,6 +178,10 @@ class DashboardFrame(ctk.CTkFrame):
         months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         values = [data[f"{i+1:02d}"] for i in range(12)]
 
+        if sum(values) == 0:
+            ctk.CTkLabel(parent, text="No case data available for the current year", font=("Arial", 12, "italic"), text_color=["#64748b", "#94a3b8"]).pack(pady=40)
+            return
+
         fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
         ax.bar(months, values, color="#2563eb", width=0.6)
         ax.set_facecolor('white')
@@ -440,7 +444,8 @@ class DashboardFrame(ctk.CTkFrame):
                         if age < 18: self.age_groups['Children'] += 1
                         elif age < 60: self.age_groups['Adults'] += 1
                         else: self.age_groups['Seniors'] += 1
-                    except: pass
+                    except (ValueError, TypeError):
+                        pass
 
             # Follow-up Reminders (Ongoing cases not touched for 30 days)
             thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')

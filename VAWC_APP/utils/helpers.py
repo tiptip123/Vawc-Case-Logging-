@@ -5,8 +5,15 @@ import io
 from datetime import datetime
 from PIL import Image, ImageTk, ImageDraw
 
+# Global image cache to prevent re-decoding base64 strings
+IMAGE_CACHE = {}
+
 def make_circle_image(base64_str_or_path, size=64):
     """Convert base64 image string or file path to a circular ImageTk.PhotoImage"""
+    cache_key = f"{base64_str_or_path}_{size}"
+    if cache_key in IMAGE_CACHE:
+        return IMAGE_CACHE[cache_key]
+
     try:
         if not base64_str_or_path:
             return None
@@ -28,7 +35,9 @@ def make_circle_image(base64_str_or_path, size=64):
         output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         output.paste(img, mask=mask)
         
-        return ImageTk.PhotoImage(output)
+        photo_img = ImageTk.PhotoImage(output)
+        IMAGE_CACHE[cache_key] = photo_img
+        return photo_img
     except Exception as e:
         print(f"Error creating circle image: {e}")
         return None
@@ -54,7 +63,7 @@ def load_config():
             with open(config_path, "r") as f:
                 return {**default_config, **json.load(f)}
         return default_config
-    except:
+    except (IOError, json.JSONDecodeError):
         return default_config
 
 def save_config(config_data):
@@ -63,7 +72,7 @@ def save_config(config_data):
         with open(config_path, "w") as f:
             json.dump(config_data, f, indent=4)
         return True
-    except:
+    except IOError:
         return False
 
 def show_success(message):

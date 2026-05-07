@@ -1,5 +1,10 @@
 __pycache__/
 *.pyc
-vawc.db
+vawc_db.sqlite
 attachments/
-backup/
+backups/
+temp_update/
+.vscode/
+.idea/
+*.sqlite
+*.db

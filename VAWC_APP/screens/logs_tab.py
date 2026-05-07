@@ -151,7 +151,7 @@ class LogsTabFrame(ctk.CTkFrame):
 
         self.tree = ttk.Treeview(
             table_frame,
-            columns=("Select", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent", "Referred To"),
+            columns=("Select", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Respondent", "Case Status", "Referred To"),
             show="headings",
             selectmode="browse"
         )
@@ -161,27 +161,12 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.tag_configure("evenrow", background="#242424" if is_dark else "#ffffff", foreground="#ffffff" if is_dark else "#000000")
         self.tree.tag_configure("oddrow", background="#1e1e1e" if is_dark else "#f8fafc", foreground="#ffffff" if is_dark else "#000000")
 
-        # Status-only coloring (ttk Treeview cannot style only a single column cell via tags.
-        # So we color the entire row, but keep other tags for readability; priority is status indicator.)
-        self.tree.tag_configure(
-            "status_referred",
-            background="#0b3a66" if is_dark else "#eff6ff",
-            foreground="#60a5fa" if is_dark else "#2563eb",
-            font=("Arial", 11, "bold"),
-        )
-        self.tree.tag_configure(
-            "status_ongoing",
-            background="#064e3b" if is_dark else "#ecfdf5",
-            foreground="#34d399" if is_dark else "#16a34a",
-            font=("Arial", 11, "bold"),
-        )
-        self.tree.tag_configure(
-            "status_settled",
-            background="#b45309" if is_dark else "#fffbeb",
-            foreground="#fbbf24" if is_dark else "#d97706",
-            font=("Arial", 11, "bold"),
-        )
-
+        # Status-only coloring
+        # We will use symbols/emojis for status to provide color without coloring the whole row
+        # Since standard ttk.Treeview doesn't support per-cell coloring, we'll use colored symbols
+        self.tree.tag_configure("status_ongoing", foreground="#16a34a") # Green
+        self.tree.tag_configure("status_settled", foreground="#dc2626") # Red
+        self.tree.tag_configure("status_referred", foreground="#2563eb") # Blue
 
         # Column alignment (readability)
         self.tree.column("VAWC No", width=140, anchor="center")
@@ -189,8 +174,8 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.column("Client Name", width=180, anchor="w")
         self.tree.column("Age", width=50, anchor="center")
         self.tree.column("Type of Abuse", width=160, anchor="w")
-        self.tree.column("Case Status", width=110, anchor="center")
         self.tree.column("Respondent", width=160, anchor="w")
+        self.tree.column("Case Status", width=110, anchor="center")
         self.tree.column("Referred To", width=140, anchor="w")
 
 
@@ -201,8 +186,8 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.column("Client Name", width=180, anchor="w")
         self.tree.column("Age", width=50, anchor="center")
         self.tree.column("Type of Abuse", width=160, anchor="w")
-        self.tree.column("Case Status", width=100, anchor="center")
         self.tree.column("Respondent", width=160, anchor="w")
+        self.tree.column("Case Status", width=100, anchor="center")
         self.tree.column("Referred To", width=120, anchor="w")
 
         for col in self.tree["columns"]:
@@ -276,19 +261,21 @@ class LogsTabFrame(ctk.CTkFrame):
             connection = get_connection()
             cursor = connection.cursor()
 
+            def escape_like(s):
+                return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
             # Get total count for pagination
             count_query = "SELECT COUNT(*) FROM vawc_logs WHERE is_deleted = 0"
             params = []
-            
+
             if self.search_term:
-                count_query += " AND (client_name LIKE ? OR vawc_no LIKE ? OR name_of_respondent LIKE ?)"
-                term = f"%{self.search_term}%"
+                count_query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\')"
+                term = f"%{escape_like(self.search_term)}%"
                 params.extend([term, term, term])
-            
+
             if self.filter_abuse:
-                # Use a custom function or LIKE with wildcards to handle multi-select fields
-                count_query += " AND type_of_abuse LIKE ?"
-                params.append(f"%{self.filter_abuse}%")
+                count_query += " AND type_of_abuse LIKE ? ESCAPE '\\'"
+                params.append(f"%{escape_like(self.filter_abuse)}%")
 
             if self.filter_status:
                 count_query += " AND case_status = ?"
@@ -304,20 +291,20 @@ class LogsTabFrame(ctk.CTkFrame):
 
             cursor.execute(count_query, params)
             self.total_count = cursor.fetchone()[0]
-            
+
             # Update pagination label
             total_pages = (self.total_count + self.limit - 1) // self.limit if self.total_count > 0 else 1
             if hasattr(self, 'page_label'):
                 self.page_label.configure(text=f"Page {self.page + 1} of {total_pages}")
 
             # Fetch data
-            query = "SELECT '☐', vawc_no, date, client_name, age, type_of_abuse, case_status, name_of_respondent, referred_to FROM vawc_logs WHERE is_deleted = 0"
-            
+            query = "SELECT '☐', vawc_no, date, client_name, age, type_of_abuse, name_of_respondent, case_status, referred_to FROM vawc_logs WHERE is_deleted = 0"
+
             # Reuse filters from count_query
             if self.search_term:
-                query += " AND (client_name LIKE ? OR vawc_no LIKE ? OR name_of_respondent LIKE ?)"
+                query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\')"
             if self.filter_abuse:
-                query += " AND type_of_abuse LIKE ?"
+                query += " AND type_of_abuse LIKE ? ESCAPE '\\'"
             if self.filter_status:
                 query += " AND case_status = ?"
             if self.filter_year:
@@ -330,7 +317,7 @@ class LogsTabFrame(ctk.CTkFrame):
 
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            
+
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
@@ -338,20 +325,25 @@ class LogsTabFrame(ctk.CTkFrame):
             for i, row in enumerate(rows):
                 vawc_no = row[1]
                 check_char = "☑" if vawc_no in self.selected_vawc_nos else "☐"
-                
+
                 # Format Referred To with a symbol if present
                 ref_to = row[8]
                 display_ref = ref_to if ref_to and ref_to != "None" else ""
-                
+
                 display_row = (check_char, row[1], row[2], row[3], row[4], row[5], row[6], row[7], display_ref)
                 tag = "evenrow" if i % 2 == 0 else "oddrow"
-                
-                # Apply special tag for referred cases to show visual badge
-                if row[6] == "Referred":
-                    tags = ("referred_row",)
+
+                # Apply special tag for status colors
+                status = row[7]
+                if status == "Ongoing":
+                    tags = (tag, "status_ongoing")
+                elif status == "Settled":
+                    tags = (tag, "status_settled")
+                elif status == "Referred":
+                    tags = (tag, "status_referred")
                 else:
                     tags = (tag,)
-                
+
                 self.tree.insert("", "end", values=display_row, tags=tags)
 
             # Update count label
@@ -427,10 +419,11 @@ class LogsTabFrame(ctk.CTkFrame):
             try:
                 connection = get_connection()
                 cursor = connection.cursor()
+                from db import log_action
                 for vawc_no in self.selected_vawc_nos:
-                    cursor.execute("UPDATE vawc_logs SET is_deleted = 1 WHERE vawc_no = ?", (vawc_no,))
-                    from db import log_action
-                    log_action(self.username, "Delete Record (Soft)", target_record=vawc_no)
+                    # Soft delete: update is_deleted and set updated_at
+                    cursor.execute("UPDATE vawc_logs SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?", (vawc_no,))
+                    log_action(self.username, "Delete Record", target_record=vawc_no, details="Moved to Trash (Archived)")
                 connection.commit()
                 messagebox.showinfo("Success", f"{count} records moved to Trash.")
                 self.toggle_selection_mode()
@@ -1025,11 +1018,17 @@ class InlineEditPanel(ctk.CTkFrame):
 
             connection = get_connection()
             cursor = connection.cursor()
+            
+            # Format dates for DB
+            date_str = date.strftime("%Y-%m-%d")
+            birthdate_db = birthdate.strftime("%Y-%m-%d") if birthdate else None
+            age_int = int(age) if age and age.isdigit() else None
+            
             cursor.execute("""
                 UPDATE vawc_logs 
                 SET date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?, updated_at=CURRENT_TIMESTAMP
                 WHERE vawc_no=?
-            """, (date, client, int(age) if age else None, contact, birthdate, address, abuses, respondent, status, attach, remarks, referred_to, self.vawc_no))
+            """, (date_str, client, age_int, contact, birthdate_db, address, abuses, respondent, status, attach, remarks, referred_to, self.vawc_no))
             connection.commit()
 
             # Log edit action
@@ -1048,3 +1047,24 @@ class InlineEditPanel(ctk.CTkFrame):
         finally:
             if connection:
                 connection.close()
+
+    def _build(self):
+        self.setup_fields()
+
+    def _load_record(self):
+        return self.load_record()
+
+    def _enable_edit(self):
+        self.set_editable(True)
+
+    def _disable_edit(self):
+        self.set_editable(False)
+
+    def _save_changes(self):
+        self.save()
+
+    def _cancel_edit(self):
+        self.cancel_edit()
+
+    def _print_record(self):
+        self.print_record()

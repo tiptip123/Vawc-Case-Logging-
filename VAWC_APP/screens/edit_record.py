@@ -34,7 +34,12 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(form_frame, text="Date of Report", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(10, 2))
         self.date_entry = DateEntry(form_frame, date_pattern="mm/dd/yyyy")
-        date_value = datetime.strptime(self.record[2], "%Y-%m-%d") if self.record[2] else None
+        date_value = None
+        if self.record[2]:
+            try:
+                date_value = datetime.strptime(self.record[2], "%Y-%m-%d")
+            except ValueError:
+                date_value = None
         if date_value:
             self.date_entry.set_date(date_value)
         self.date_entry.pack(padx=10, pady=(0, 10), fill="x")
@@ -59,7 +64,10 @@ class EditRecordWindow(ctk.CTkToplevel):
         ctk.CTkLabel(form_frame, text="Birthdate", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         self.birthdate_entry = DateEntry(form_frame, date_pattern="mm/dd/yyyy")
         if self.record[6]:
-            self.birthdate_entry.set_date(datetime.strptime(self.record[6], "%Y-%m-%d"))
+            try:
+                self.birthdate_entry.set_date(datetime.strptime(self.record[6], "%Y-%m-%d"))
+            except ValueError:
+                pass
         self.birthdate_entry.pack(padx=10, pady=(0, 10), fill="x")
         self.birthdate_entry.bind("<<DateEntrySelected>>", self.on_birthdate_change)
 

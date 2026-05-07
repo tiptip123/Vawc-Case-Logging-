@@ -3,8 +3,10 @@ from openpyxl.styles import Font
 from tkinter import filedialog
 import os
 from db import get_connection
+from utils.helpers import load_config
 
 def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_year="", filter_month=""):
+    config = load_config()
     filename = "VAWC_Records.xlsx"
     path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile=filename, filetypes=[("Excel files", "*.xlsx")])
     if not path:
@@ -17,7 +19,7 @@ def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_ye
         ws.title = "VAWC Logs"
 
         # Add title
-        ws.cell(row=1, column=1).value = "REPUBLIC OF THE PHILIPPINES - BARANGAY TANKULAN - VAWC RECORDS"
+        ws.cell(row=1, column=1).value = f"REPUBLIC OF THE PHILIPPINES - {config['lgu_name'].upper()} - VAWC RECORDS"
         ws.cell(row=1, column=1).font = Font(bold=True, size=14)
 
         headers = ["VAWC No", "Date", "Client Name", "Age", "Contact", "Birthdate", "Address", "Type of Abuse", "Case Status", "Respondent", "Remarks", "Referred To"]

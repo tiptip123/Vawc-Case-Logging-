@@ -14,6 +14,8 @@ from .audit_logs import AuditLogFrame
 
 from utils.helpers import load_config, make_circle_image
 
+from db import get_connection
+
 class MainWindow(ctk.CTk):
     def __init__(self, username, user_role):
         super().__init__()
@@ -78,23 +80,34 @@ class MainWindow(ctk.CTk):
         self.page_title = ctk.CTkLabel(self.header, text="Dashboard", font=("Arial", 18, "bold"), text_color=self.colors["text_primary"])
         self.page_title.pack(side="left", padx=30)
 
-        # Header Right - Status & Clock
-        header_right = ctk.CTkFrame(self.header, fg_color="transparent")
-        header_right.pack(side="right", padx=30)
-        
-        self.db_status = ctk.CTkLabel(header_right, text="🟢 Database Connected", font=("Arial", 11), text_color="#16a34a")
-        self.db_status.pack(side="left", padx=20)
-        
-        self.clock_label = ctk.CTkLabel(header_right, text="", font=("Arial", 12), text_color=self.colors["text_secondary"])
-        self.clock_label.pack(side="left")
-        self.update_clock()
-
         # 3. CONTENT AREA
         self.content = ctk.CTkFrame(self, fg_color=self.colors["bg_light"], corner_radius=0)
         self.content.grid(row=1, column=1, sticky="nsew")
 
+        # 4. STATUS BAR
+        self.status_bar = ctk.CTkFrame(self, height=30, fg_color=["#f1f5f9", "#0f172a"], corner_radius=0, border_width=1, border_color=self.colors["border_light"])
+        self.status_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self.status_bar.grid_propagate(False)
+
+        # Status Bar Left: User Info
+        self.status_user_label = ctk.CTkLabel(self.status_bar, text=f"👤 {self.username} ({self.user_role})", font=("Arial", 11), text_color=self.colors["text_secondary"])
+        self.status_user_label.pack(side="left", padx=20)
+
+        # Status Bar Right: Clock & DB
+        self.db_status = ctk.CTkLabel(self.status_bar, text="🟢 DB Connected", font=("Arial", 11), text_color="#16a34a")
+        self.db_status.pack(side="right", padx=20)
+        
+        self.clock_label = ctk.CTkLabel(self.status_bar, text="", font=("Arial", 11), text_color=self.colors["text_secondary"])
+        self.clock_label.pack(side="right", padx=10)
+        self.update_clock()
+
         self.current_frame = None
         self.show_dashboard()
+
+        # Keyboard Shortcuts
+        self.bind_all("<Control-n>", lambda e: self.show_add_record())
+        self.bind_all("<Control-f>", lambda e: self.focus_search())
+        self.bind_all("<Escape>", lambda e: self.show_dashboard())
 
         # Session Timeout (15 minutes)
         self.last_activity = datetime.now()
@@ -118,7 +131,8 @@ class MainWindow(ctk.CTk):
             if res:
                 user_full_name = res[0] or self.username
                 user_pic_data = res[1]
-        except: pass
+        except Exception:
+            pass
         finally:
             if connection: connection.close()
 
@@ -218,6 +232,7 @@ class MainWindow(ctk.CTk):
         self.after(1000, self.update_clock)
 
     def show_dashboard(self):
+        if not self.check_unsaved_changes(): return
         self.page_title.configure(text="Dashboard")
         self.clear_content()
         self.current_frame = DashboardFrame(self.content)
@@ -225,6 +240,7 @@ class MainWindow(ctk.CTk):
         self.set_active_nav(self.nav_buttons[0])
 
     def show_logs(self):
+        if not self.check_unsaved_changes(): return
         self.page_title.configure(text="VAWC Logs")
         self.clear_content()
         self.current_frame = LogsTabFrame(self.content, self.username)
@@ -232,6 +248,7 @@ class MainWindow(ctk.CTk):
         self.set_active_nav(self.nav_buttons[1])
 
     def show_add_record(self):
+        if not self.check_unsaved_changes(): return
         self.page_title.configure(text="Add New Record")
         self.clear_content()
         self.current_frame = AddRecordFrame(self.content, self.username, on_save=self.show_logs)
@@ -239,6 +256,7 @@ class MainWindow(ctk.CTk):
         self.set_active_nav(self.nav_buttons[2])
 
     def show_reports(self):
+        if not self.check_unsaved_changes(): return
         self.page_title.configure(text="Reports")
         self.clear_content()
         self.current_frame = ReportsFrame(self.content)
@@ -246,11 +264,20 @@ class MainWindow(ctk.CTk):
         self.set_active_nav(self.nav_buttons[3])
 
     def show_settings(self):
+        if not self.check_unsaved_changes(): return
         self.page_title.configure(text="Settings")
         self.clear_content()
         self.current_frame = SettingsFrame(self.content, self.user_role, self)
         self.current_frame.pack(fill="both", expand=True)
         self.set_active_nav(self.nav_buttons[4])
+
+    def check_unsaved_changes(self):
+        """Warn user if they are leaving a form with unsaved changes"""
+        if isinstance(self.current_frame, AddRecordFrame):
+            if hasattr(self.current_frame, 'has_unsaved_changes') and self.current_frame.has_unsaved_changes():
+                if not messagebox.askyesno("Unsaved Changes", "You have unsaved data in the form. Are you sure you want to leave?"):
+                    return False
+        return True
 
     def clear_content(self):
         for widget in self.content.winfo_children():
@@ -281,6 +308,11 @@ class MainWindow(ctk.CTk):
         # Add back button
         back_btn = ctk.CTkButton(self.current_frame, text="← Back to Settings", command=self.show_settings, fg_color="transparent", text_color="#1a2a4a", hover_color="#eeeeee", width=120)
         back_btn.place(x=20, y=10)
+
+    def focus_search(self):
+        self.show_logs()
+        if hasattr(self.current_frame, 'search_entry'):
+            self.current_frame.search_entry.focus_set()
 
     def logout(self):
         self.destroy()

@@ -48,7 +48,7 @@ class AddRecordFrame(ctk.CTkFrame):
         self.setup_form_fields()
 
         # Auto-save Draft Timer
-        self.draft_file = os.path.join(os.getcwd(), "draft_record.json")
+        self.draft_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "draft_record.json")
         self.load_draft()
         self.start_autosave()
 
@@ -70,7 +70,8 @@ class AddRecordFrame(ctk.CTkFrame):
             }
             with open(self.draft_file, "w") as f:
                 json.dump(draft_data, f)
-        except: pass
+        except (IOError, json.JSONDecodeError):
+            pass
 
     def load_draft(self):
         try:
@@ -87,7 +88,8 @@ class AddRecordFrame(ctk.CTkFrame):
                             self.remarks_text.insert("1.0", data.get("remarks", ""))
                             self.case_status_var.set(data.get("status", "Settled"))
                             self.update_status_style(data.get("status", "Settled"))
-        except: pass
+        except (IOError, json.JSONDecodeError):
+            pass
 
     def setup_form_fields(self):
         # Section Header Helper
@@ -247,7 +249,8 @@ class AddRecordFrame(ctk.CTkFrame):
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("SELECT COUNT(*) FROM vawc_logs WHERE client_name LIKE ? AND is_deleted = 0", (f"%{client_name}%",))
+            escaped_name = client_name.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+            cursor.execute("SELECT COUNT(*) FROM vawc_logs WHERE client_name LIKE ? ESCAPE '\\' AND is_deleted = 0", (f"%{escaped_name}%",))
             count = cursor.fetchone()[0]
 
             if count > 0:
@@ -390,6 +393,16 @@ class AddRecordFrame(ctk.CTkFrame):
         self.refresh_file_list()
         self.remarks_text.delete("1.0", "end")
 
+    def has_unsaved_changes(self):
+        """Check if any primary field has input that hasn't been saved"""
+        try:
+            if self.client_entry.get().strip(): return True
+            if self.respondent_entry.get().strip(): return True
+            if self.address_text.get("1.0", "end").strip(): return True
+            if any(v.get() for v in self.abuse_vars.values()): return True
+        except: pass
+        return False
+
     def save(self):
         self.client_entry.configure(border_color="#e2e8f0")
         date = self.date_entry.get_date()
@@ -426,7 +439,8 @@ class AddRecordFrame(ctk.CTkFrame):
             if dup:
                 if not messagebox.askyesno("Potential Duplicate", f"A record for '{client}' on this date already exists ({dup[0]}). Save anyway?"):
                     return
-        except: pass
+        except Exception:
+            pass
         finally:
             if connection:
                 connection.close()

@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from db import get_connection
 from utils.helpers import make_circle_image
 import base64
@@ -60,33 +60,34 @@ class UserManagementFrame(ctk.CTkFrame):
         table_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
+        is_dark = ctk.get_appearance_mode() == "Dark"
+
         style = ttk.Style()
         tree_bg = "#ffffff" if ctk.get_appearance_mode() == "Light" else "#2b2b2b"
         tree_fg = "#000000" if ctk.get_appearance_mode() == "Light" else "#ffffff"
         style.configure("User.Treeview", background=tree_bg, foreground=tree_fg, rowheight=40, fieldbackground=tree_bg, font=("Arial", 11), borderwidth=0)
         style.map("User.Treeview", background=[("selected", "#1a2a4a")], foreground=[("selected", "#ffffff")])
-        
+
         # Heading configuration
         heading_bg = "#f1f5f9" if not is_dark else "#1a1a1a"
         style.configure("User.Treeview.Heading", background=heading_bg, foreground=tree_fg, font=("Arial", 11, "bold"), borderwidth=0)
 
         self.tree = ttk.Treeview(table_frame, columns=("Username", "Full Name", "Role", "Status"), show="headings", selectmode="browse", style="User.Treeview")
-        
+
         self.tree.heading("Username", text="USERNAME")
         self.tree.heading("Full Name", text="FULL NAME")
         self.tree.heading("Role", text="ROLE")
         # Configure tags with single strings
-        is_dark = ctk.get_appearance_mode() == "Dark"
         self.tree.tag_configure("evenrow", background="#242424" if is_dark else "#ffffff", foreground="#ffffff" if is_dark else "#000000")
         self.tree.tag_configure("oddrow", background="#1e1e1e" if is_dark else "#f8fafc", foreground="#ffffff" if is_dark else "#000000")
-        
+
         for col in self.tree["columns"]:
             self.tree.column(col, anchor="w", width=200)
 
         # Custom Scrollbar
         scrollbar = ctk.CTkScrollbar(table_frame, orientation="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
-        
+
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
@@ -233,9 +234,11 @@ class EditUserPanel(ctk.CTkScrollableFrame):
         self.setup_ui()
 
     def load_user_data(self):
+        import sqlite3
         connection = None
         try:
             connection = get_connection()
+            connection.row_factory = sqlite3.Row
             cursor = connection.cursor()
             cursor.execute("SELECT * FROM users WHERE username = ?", (self.target_username,))
             return cursor.fetchone()
@@ -266,21 +269,21 @@ class EditUserPanel(ctk.CTkScrollableFrame):
         self.avatar_label.place(relx=0.5, rely=0.5, anchor="center")
 
         # Load existing pic
-        self.profile_pic_base64 = self.user_data[11] # profile_picture column (base64 string)
+        self.profile_pic_base64 = self.user_data['profile_picture'] # profile_picture column (base64 string)
         self.refresh_avatar_display()
 
         # Change Photo Button
-        ctk.CTkButton(left_sec, text="📷 Change Photo", fg_color="#1a2a4a", height=32, width=140, command=self.upload_pic).pack(pady=10)
+        ctk.CTkButton(left_sec, text="📷 Change Photo", fg_color="#1a2a4a", hover_color="#0f1e35", height=32, width=140, corner_radius=8, command=self.upload_pic).pack(pady=10)
 
         # Fields
-        ctk.CTkLabel(left_sec, text="Full Name", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
-        self.entry_fullname = ctk.CTkEntry(left_sec, height=40)
-        self.entry_fullname.insert(0, self.user_data[3] or "")
+        ctk.CTkLabel(left_sec, text="Full Name *", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(15, 2))
+        self.entry_fullname = ctk.CTkEntry(left_sec, height=40, placeholder_text="Enter full name")
+        self.entry_fullname.insert(0, self.user_data['full_name'] or "")
         self.entry_fullname.pack(fill="x")
 
-        ctk.CTkLabel(left_sec, text="Username", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
-        self.entry_username = ctk.CTkEntry(left_sec, height=40)
-        self.entry_username.insert(0, self.user_data[1])
+        ctk.CTkLabel(left_sec, text="Username *", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(15, 2))
+        self.entry_username = ctk.CTkEntry(left_sec, height=40, placeholder_text="Enter username")
+        self.entry_username.insert(0, self.user_data['username'])
         self.entry_username.pack(fill="x")
 
         # Right Section: Security
@@ -290,20 +293,20 @@ class EditUserPanel(ctk.CTkScrollableFrame):
         ctk.CTkLabel(right_sec, text="🔒 Security Settings", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", pady=(0, 20))
 
         # Password (Optional)
-        ctk.CTkLabel(right_sec, text="New Password (Leave blank to keep current)", font=("Arial", 11), anchor="w").pack(fill="x", pady=(0, 2))
-        self.entry_pass = ctk.CTkEntry(right_sec, height=40, show="*")
+        ctk.CTkLabel(right_sec, text="New Password (Leave blank to keep current)", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(0, 2))
+        self.entry_pass = ctk.CTkEntry(right_sec, height=40, show="*", placeholder_text="Enter new password")
         self.entry_pass.pack(fill="x")
 
-        self.entry_confirm = ctk.CTkEntry(right_sec, height=40, show="*", placeholder_text="Confirm New Password")
+        self.entry_confirm = ctk.CTkEntry(right_sec, height=40, show="*", placeholder_text="Confirm new password")
         self.entry_confirm.pack(fill="x", pady=10)
 
         # Passcode
-        ctk.CTkLabel(right_sec, text="6-Digit Recovery Passcode", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
-        self.entry_passcode = ctk.CTkEntry(right_sec, height=40, placeholder_text="Enter new 6-digit passcode")
+        ctk.CTkLabel(right_sec, text="6-Digit Recovery Passcode (Optional)", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(15, 2))
+        self.entry_passcode = ctk.CTkEntry(right_sec, height=40, placeholder_text="e.g. 123456")
         self.entry_passcode.pack(fill="x")
 
         # Security Question
-        ctk.CTkLabel(right_sec, text="Security Question", font=("Arial", 12), anchor="w").pack(fill="x", pady=(15, 2))
+        ctk.CTkLabel(right_sec, text="Security Question", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(15, 2))
         self.questions = [
             "What is the name of your elementary school?",
             "What is your mother's maiden name?",
@@ -311,19 +314,20 @@ class EditUserPanel(ctk.CTkScrollableFrame):
             "In what city were you born?",
             "What is your favorite book?"
         ]
-        self.sec_var = ctk.StringVar(value=self.user_data[6] or self.questions[0])
+        self.sec_var = ctk.StringVar(value=self.user_data['security_question'] or self.questions[0])
         self.sec_combo = ctk.CTkComboBox(right_sec, values=self.questions, variable=self.sec_var, height=40)
         self.sec_combo.pack(fill="x")
 
-        self.entry_answer = ctk.CTkEntry(right_sec, height=40, placeholder_text="Security Answer")
+        self.entry_answer = ctk.CTkEntry(right_sec, height=40, placeholder_text="Security Answer (Optional)")
         self.entry_answer.pack(fill="x", pady=10)
 
         # Footer Actions
         footer = ctk.CTkFrame(container, fg_color="transparent")
-        footer.grid(row=1, column=0, columnspan=2, pady=20)
+        footer.grid(row=1, column=0, columnspan=2, pady=20, sticky="ew")
+        footer.grid_columnconfigure((0, 1), weight=1)
         
-        ctk.CTkButton(footer, text="Save Changes", fg_color="#1a2a4a", height=42, width=160, font=("Arial", 13, "bold"), command=self.save).pack(side="left", padx=10)
-        ctk.CTkButton(footer, text="Cancel", fg_color="transparent", text_color=["#64748b", "#94a3b8"], border_width=1, border_color=["#e2e8f0", "#333333"], height=42, width=120, command=self.on_cancel).pack(side="left", padx=10)
+        ctk.CTkButton(footer, text="Save Changes", fg_color="#1a2a4a", hover_color="#0f1e35", height=42, corner_radius=8, font=("Arial", 13, "bold"), command=self.save).pack(side="left", fill="x", expand=True, padx=10)
+        ctk.CTkButton(footer, text="Cancel", fg_color="transparent", text_color=["#64748b", "#94a3b8"], border_width=1, border_color=["#e2e8f0", "#333333"], height=42, corner_radius=8, command=self.on_cancel).pack(side="left", fill="x", expand=True, padx=10)
 
     def upload_pic(self):
         file_path = filedialog.askopenfilename(
@@ -498,7 +502,7 @@ class ResetPasswordDialog(ctk.CTkToplevel):
 
     def verify_passcode(self):
         entered = self.entry_verify_pass.get().strip()
-        stored_hash = self.user_data[5] # passcode column
+        stored_hash = self.user_data['passcode']
         
         if stored_hash and bcrypt.checkpw(entered.encode('utf-8'), stored_hash.encode('utf-8')):
             self.show_reset_step()
@@ -510,7 +514,7 @@ class ResetPasswordDialog(ctk.CTkToplevel):
         
         ctk.CTkLabel(self.container, text="Security Verification", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=20)
         
-        question = self.user_data[6] or "No security question set."
+        question = self.user_data['security_question'] or "No security question set."
         ctk.CTkLabel(self.container, text=question, font=("Arial", 12, "bold"), wraplength=350).pack(pady=10)
         
         self.entry_verify_sec = ctk.CTkEntry(self.container, height=40, placeholder_text="Answer")
@@ -522,7 +526,7 @@ class ResetPasswordDialog(ctk.CTkToplevel):
 
     def verify_security(self):
         answer = self.entry_verify_sec.get().strip().lower()
-        stored_hash = self.user_data[7]
+        stored_hash = self.user_data['security_answer']
         if stored_hash and bcrypt.checkpw(answer.encode('utf-8'), stored_hash.encode('utf-8')):
             self.show_reset_step()
         else:

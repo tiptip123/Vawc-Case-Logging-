@@ -1,24 +1,20 @@
 {
-  "version": "1.0.0",
-  "description": "Initial version with redesigned sidebar and settings page.",
-  "files": [
-    "version.txt",
-    "main.py",
-    "db.py",
-    "auth.py",
-    "vawc_number.py",
-    "screens/login.py",
-    "screens/main_window.py",
-    "screens/dashboard.py",
-    "screens/logs_tab.py",
-    "screens/add_record.py",
-    "screens/view_record.py",
-    "screens/edit_record.py",
-    "screens/reports.py",
-    "screens/settings.py",
-    "screens/user_management.py",
-    "utils/helpers.py",
-    "utils/pdf_export.py",
-    "utils/excel_export.py"
-  ]
+    "version": "1.0.1",
+    "release_date": "2026-05-07",
+    "description": "Full System Audit and Optimization Release. Includes login fixes, user management stability, record archiving logic, and online GitHub update system.",
+    "files": [
+        "VAWC_APP/version.txt",
+        "VAWC_APP/config.json",
+        "VAWC_APP/auth.py",
+        "VAWC_APP/db.py",
+        "VAWC_APP/screens/login.py",
+        "VAWC_APP/screens/main_window.py",
+        "VAWC_APP/screens/dashboard.py",
+        "VAWC_APP/screens/logs_tab.py",
+        "VAWC_APP/screens/user_management.py",
+        "VAWC_APP/screens/settings.py",
+        "VAWC_APP/screens/add_record.py",
+        "VAWC_APP/utils/helpers.py",
+        "VAWC_APP/utils/excel_export.py"
+    ]
 }

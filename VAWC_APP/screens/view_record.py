@@ -1,6 +1,8 @@
 import customtkinter as ctk
 from tkinter import messagebox
 import os
+import subprocess
+import platform
 from PIL import Image, ImageTk
 import tkinter as tk
 from datetime import datetime
@@ -8,6 +10,17 @@ from db import get_connection
 from utils.pdf_export import export_single_pdf
 from .edit_record import EditRecordWindow
 from .screen_header import ScreenHeader
+
+def open_file_cross_platform(file_path):
+    try:
+        if platform.system() == "Windows":
+            os.startfile(file_path)
+        elif platform.system() == "Darwin":
+            subprocess.Popen(["open", file_path])
+        else:
+            subprocess.Popen(["xdg-open", file_path])
+    except Exception as e:
+        messagebox.showerror("Error", f"Could not open file: {str(e)}")
 
 class ViewRecordWindow(ctk.CTkToplevel):
     def __init__(self, parent, vawc_no, on_edit_saved=None):
@@ -172,7 +185,7 @@ class ViewRecordWindow(ctk.CTkToplevel):
                 ctk.CTkLabel(info_frame, text=f"Size: {os.path.getsize(file_path)} bytes", font=("Arial", 10), text_color=["#666666", "#999999"]).pack(anchor="w")
 
                 # Open button
-                ctk.CTkButton(info_frame, text="Open Image", fg_color="#8b0000", command=lambda: os.startfile(file_path)).pack(anchor="w", pady=(5, 0))
+                ctk.CTkButton(info_frame, text="Open Image", fg_color="#8b0000", command=lambda: open_file_cross_platform(file_path)).pack(anchor="w", pady=(5, 0))
 
             except Exception as e:
                 # Fallback if image can't be loaded
@@ -199,6 +212,6 @@ class ViewRecordWindow(ctk.CTkToplevel):
             ctk.CTkLabel(info_frame, text=f"Size: {file_size} bytes", font=("Arial", 10), text_color=["#666666", "#999999"]).pack(anchor="w")
 
             # Open button
-            ctk.CTkButton(info_frame, text="Open File", fg_color="#1a73e8", command=lambda: os.startfile(file_path)).pack(anchor="w", pady=(5, 0))
+            ctk.CTkButton(info_frame, text="Open File", fg_color="#1a73e8", command=lambda: open_file_cross_platform(file_path)).pack(anchor="w", pady=(5, 0))
         else:
             ctk.CTkLabel(info_frame, text="File not found", font=("Arial", 10), text_color="#ff0000").pack(anchor="w")
