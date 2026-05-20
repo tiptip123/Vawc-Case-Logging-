@@ -350,7 +350,11 @@ class EditUserPanel(ctk.CTkScrollableFrame):
             top = (h - min_dim)/2
             right = (w + min_dim)/2
             bottom = (h + min_dim)/2
-            img = img.crop((left, top, right, bottom)).resize((256, 256), Image.Resampling.LANCZOS)
+            try:
+                resample = Image.Resampling.LANCZOS
+            except AttributeError:
+                resample = Image.LANCZOS
+            img = img.crop((left, top, right, bottom)).resize((256, 256), resample)
             
             # Save to base64 string
             buffer = io.BytesIO()

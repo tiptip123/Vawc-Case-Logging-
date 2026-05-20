@@ -8,7 +8,6 @@ import subprocess
 from datetime import datetime
 
 import threading
-import requests
 import zipfile
 import io
 
@@ -17,7 +16,8 @@ class SettingsFrame(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.user_role = user_role
         self.main_window = main_window
-        self.version_file = os.path.join(os.getcwd(), "version.txt")
+        # Use package-relative path so this works regardless of cwd
+        self.version_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "version.txt")
         self.current_version = self.load_version()
         
         # Panel tracking
@@ -561,6 +561,11 @@ class OnlineUpdatePanel(ctk.CTkFrame):
 
     def check_github(self):
         try:
+            try:
+                import requests
+            except ImportError:
+                self.after(0, lambda: self.status_label.configure(text="`requests` package not installed. Run install.bat.", text_color="#dc2626"))
+                return
             # GitHub API for latest release
             url = f"https://api.github.com/repos/{self.repo}/releases/latest"
             response = requests.get(url, timeout=10)
@@ -604,6 +609,12 @@ class OnlineUpdatePanel(ctk.CTkFrame):
 
     def download_and_extract(self, url, version):
         try:
+            try:
+                import requests
+            except ImportError:
+                self.after(0, lambda: messagebox.showerror("Download Error", "The 'requests' package is not installed. Please install requirements."))
+                self.after(0, self.settings.setup_main_view)
+                return
             response = requests.get(url, stream=True)
             total_size = int(response.headers.get('content-length', 0))
             

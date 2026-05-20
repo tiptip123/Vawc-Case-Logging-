@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from utils.pdf_export import export_full_pdf, export_filtered_pdf
 from utils.excel_export import export_to_excel
+from db import get_abuse_types
 
 class ReportsFrame(ctk.CTkFrame):
     def __init__(self, parent):
@@ -41,7 +42,11 @@ class ReportsFrame(ctk.CTkFrame):
         
         # Abuse Type
         self.abuse_var = ctk.StringVar(value="Type of Abuse")
-        self.abuse_combo = ctk.CTkComboBox(filter_grid, values=["Type of Abuse", "Domestic Abuse", "Financial Abuse", "Material Abuse", "Modern Slavery", "Criminal Exploitation", "Neglect", "Acts of Omission", "Organisational Abuse", "Self-Neglect", "Hoarding", "Sexual Abuse", "Sexual Exploitation", "Emotional Abuse", "Psychological Abuse"], variable=self.abuse_var, height=38)
+        try:
+            abuse_values = ["Type of Abuse"] + get_abuse_types()
+        except Exception:
+            abuse_values = ["Type of Abuse"]
+        self.abuse_combo = ctk.CTkComboBox(filter_grid, values=abuse_values, variable=self.abuse_var, height=38)
         self.abuse_combo.pack(side="left", padx=5)
         
         # Year

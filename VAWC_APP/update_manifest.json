@@ -1,20 +1,28 @@
 {
-    "version": "1.0.1",
-    "release_date": "2026-05-07",
-    "description": "Full System Audit and Optimization Release. Includes login fixes, user management stability, record archiving logic, and online GitHub update system.",
+    "version": "1.0.3",
+    "release_date": "2026-05-20",
+    "description": "Admin abuse type controls are now always visible, delete operations are faster via batched database updates, and release metadata is synchronized.",
     "files": [
         "VAWC_APP/version.txt",
         "VAWC_APP/config.json",
         "VAWC_APP/auth.py",
         "VAWC_APP/db.py",
+        "VAWC_APP/main.py",
         "VAWC_APP/screens/login.py",
         "VAWC_APP/screens/main_window.py",
         "VAWC_APP/screens/dashboard.py",
         "VAWC_APP/screens/logs_tab.py",
-        "VAWC_APP/screens/user_management.py",
-        "VAWC_APP/screens/settings.py",
         "VAWC_APP/screens/add_record.py",
+        "VAWC_APP/screens/edit_record.py",
+        "VAWC_APP/screens/view_record.py",
+        "VAWC_APP/screens/reports.py",
+        "VAWC_APP/screens/settings.py",
+        "VAWC_APP/screens/user_management.py",
         "VAWC_APP/utils/helpers.py",
-        "VAWC_APP/utils/excel_export.py"
+        "VAWC_APP/utils/excel_export.py",
+        "VAWC_APP/utils/pdf_export.py",
+        "VAWC_APP/update_manifest.json",
+        "VAWC_APP/RELEASE_CHECKLIST.txt",
+        "VAWC_APP/requirements.txt"
     ]
 }

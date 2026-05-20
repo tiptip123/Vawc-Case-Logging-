@@ -1,3 +1,8 @@
+import os
+import sys
+# Ensure the application package directory is on sys.path regardless of cwd
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import customtkinter as ctk
 from db import init_db, log_action
 from screens.login import LoginScreen

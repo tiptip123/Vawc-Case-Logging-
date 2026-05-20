@@ -4,16 +4,18 @@ import os
 from tkcalendar import DateEntry
 from datetime import datetime
 from db import get_connection
+from db import get_abuse_types, add_abuse_type, update_abuse_type, delete_abuse_type
 from utils.helpers import calculate_age
 from utils.pdf_export import export_single_pdf
 from .view_record import ViewRecordWindow
 from .edit_record import EditRecordWindow
 
 class LogsTabFrame(ctk.CTkFrame):
-    def __init__(self, parent, username):
+    def __init__(self, parent, username, user_role="Staff"):
         super().__init__(parent, fg_color="transparent")
 
         self.username = username
+        self.user_role = user_role
         self.page = 0
         self.limit = 20
         self.search_term = ""
@@ -229,14 +231,15 @@ class LogsTabFrame(ctk.CTkFrame):
     # ================= FUNCTIONS =================
 
     def get_abuse_types(self):
-        # Use a hardcoded list of abuse types to ensure the filter matches the individual types
-        # This matches the list in AddRecordFrame and InlineEditPanel
-        return [
-             "Domestic Abuse", "Financial Abuse", "Material Abuse", "Modern Slavery",
-             "Criminal Exploitation", "Neglect", "Acts of Omission", "Organisational Abuse",
-             "Self-Neglect", "Hoarding", "Sexual Abuse", "Sexual Exploitation",
-             "Emotional Abuse", "Psychological Abuse"
-         ]
+        try:
+            return get_abuse_types()
+        except Exception:
+            return [
+                "Domestic Abuse", "Financial Abuse", "Material Abuse", "Modern Slavery",
+                "Criminal Exploitation", "Neglect", "Acts of Omission", "Organisational Abuse",
+                "Self-Neglect", "Hoarding", "Sexual Abuse", "Sexual Exploitation",
+                "Emotional Abuse", "Psychological Abuse"
+            ]
 
     def on_filter(self, event=None):
         self.search_term = self.search_entry.get()
@@ -419,11 +422,15 @@ class LogsTabFrame(ctk.CTkFrame):
             try:
                 connection = get_connection()
                 cursor = connection.cursor()
-                from db import log_action
-                for vawc_no in self.selected_vawc_nos:
-                    # Soft delete: update is_deleted and set updated_at
-                    cursor.execute("UPDATE vawc_logs SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?", (vawc_no,))
-                    log_action(self.username, "Delete Record", target_record=vawc_no, details="Moved to Trash (Archived)")
+                vawc_nos = list(self.selected_vawc_nos)
+                cursor.executemany(
+                    "UPDATE vawc_logs SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?",
+                    [(vawc_no,) for vawc_no in vawc_nos]
+                )
+                cursor.executemany(
+                    "INSERT INTO audit_logs (username, action, target_record, details) VALUES (?, ?, ?, ?)",
+                    [(self.username, "Delete Record", vawc_no, "Moved to Trash (Archived)") for vawc_no in vawc_nos]
+                )
                 connection.commit()
                 messagebox.showinfo("Success", f"{count} records moved to Trash.")
                 self.toggle_selection_mode()
@@ -456,7 +463,7 @@ class LogsTabFrame(ctk.CTkFrame):
                 widget.destroy()
                 
             # Inline Edit Panel
-            edit_panel = InlineEditPanel(self.edit_view, vawc_no, self.username, on_save=self.close_inline_edit, on_cancel=self.close_inline_edit)
+            edit_panel = InlineEditPanel(self.edit_view, vawc_no, self.username, self.user_role, on_save=self.close_inline_edit, on_cancel=self.close_inline_edit)
             edit_panel.pack(fill="both", expand=True)
         except Exception as e:
             messagebox.showerror("Error", f"Could not open edit view: {str(e)}")
@@ -467,10 +474,11 @@ class LogsTabFrame(ctk.CTkFrame):
         self.load_data()
 
 class InlineEditPanel(ctk.CTkFrame):
-    def __init__(self, parent, vawc_no, username, on_save, on_cancel):
+    def __init__(self, parent, vawc_no, username, user_role, on_save, on_cancel):
         super().__init__(parent, fg_color="transparent")
         self.vawc_no = vawc_no
         self.username = username
+        self.user_role = user_role
         self.on_save_callback = on_save
         self.on_cancel_callback = on_cancel
         self.attachments = []
@@ -696,21 +704,12 @@ class InlineEditPanel(ctk.CTkFrame):
         row5.pack(fill="x", pady=(15, 10))
         create_label(row5, "Type of Abuse").pack(fill="x", pady=(0, 10))
         
-        abuse_grid = ctk.CTkFrame(row5, fg_color="transparent", corner_radius=0)
-        abuse_grid.pack(fill="x")
-        
         self.abuse_vars = {}
-        abuses = ["Domestic Abuse", "Financial Abuse", "Material Abuse", "Modern Slavery", "Criminal Exploitation", "Neglect", "Acts of Omission", "Organisational Abuse", "Self-Neglect", "Hoarding", "Sexual Abuse", "Sexual Exploitation", "Emotional Abuse", "Psychological Abuse"]
-
-        for i, abuse in enumerate(abuses):
-            var = ctk.BooleanVar(value=False)
-            self.abuse_vars[abuse] = var
-            pill = ctk.CTkFrame(abuse_grid, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#cccccc", "#555555"], corner_radius=20)
-            pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
-            abuse_grid.grid_columnconfigure(i%4, weight=1)
-            cb = ctk.CTkCheckBox(pill, text=abuse, variable=var, text_color=["black", "white"], checkbox_width=18, checkbox_height=18, command=lambda a=abuse, p=pill, v=var: self.update_pill_style(a, p, v))
-            cb.pack(padx=15, pady=8, side="left")
-            var._pill_widget = pill # Store for direct updates
+        self.abuse_order = get_abuse_types()
+        existing_abuses = set(self.record[8].split(", ")) if self.record[8] else set()
+        self.abuse_frame = ctk.CTkFrame(row5, fg_color="transparent", corner_radius=0)
+        self.abuse_frame.pack(fill="x")
+        self.render_abuse_grid(existing_abuses)
 
         # Row 6: Remarks
         row6 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
@@ -859,6 +858,135 @@ class InlineEditPanel(ctk.CTkFrame):
         else:
             self.attachments = []
         self.refresh_file_list()
+
+    def render_abuse_grid(self, existing_abuses=None):
+        existing_abuses = existing_abuses or set()
+        self.abuse_order = get_abuse_types()
+        for widget in self.abuse_frame.winfo_children():
+            widget.destroy()
+
+        for i, abuse in enumerate(self.abuse_order):
+            var = self.abuse_vars.get(abuse) or ctk.BooleanVar(value=(abuse in existing_abuses))
+            self.abuse_vars[abuse] = var
+            pill = ctk.CTkFrame(self.abuse_frame, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#cccccc", "#555555"], corner_radius=20)
+            pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
+            self.abuse_frame.grid_columnconfigure(i%4, weight=1)
+            cb = ctk.CTkCheckBox(pill, text=abuse, variable=var, text_color=["black", "white"], checkbox_width=18, checkbox_height=18, command=lambda a=abuse, p=pill, v=var: self.update_pill_style(a, p, v))
+            cb.pack(padx=15, pady=8, side="left")
+            var._pill_widget = pill
+
+            if self.user_role == 'Admin':
+                controls_frame = ctk.CTkFrame(pill, fg_color="transparent")
+                edit_btn = ctk.CTkButton(controls_frame, text="Edit", width=52, height=28, fg_color="transparent", hover_color="#e2e8f0", text_color="#475569", command=lambda a=abuse: self.open_edit_type_modal(a))
+                delete_btn = ctk.CTkButton(controls_frame, text="Delete", width=58, height=28, fg_color="transparent", hover_color="#fee2e2", text_color="#b91c1c", command=lambda a=abuse: self.confirm_delete_type(a))
+                edit_btn.pack(side="left", padx=(0, 4))
+                delete_btn.pack(side="left", padx=(0, 4))
+                controls_frame.pack(side="right", padx=(0, 10), pady=8)
+
+        if self.user_role == 'Admin':
+            i = len(self.abuse_order)
+            add_pill = ctk.CTkFrame(self.abuse_frame, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#cccccc", "#555555"], corner_radius=20)
+            add_pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
+            self.abuse_frame.grid_columnconfigure(i%4, weight=1)
+            add_btn = ctk.CTkButton(add_pill, text="+ Add New Type", fg_color="transparent", text_color=["#1a2a4a", "#f8fafc"], border_width=1, border_color=["#94a3b8", "#6b7280"], command=self.open_add_type_modal)
+            add_btn.pack(padx=15, pady=8, fill="x")
+
+    def open_add_type_modal(self):
+        modal = ctk.CTkToplevel(self)
+        modal.title("Add New Type of Abuse")
+        modal.geometry("420x140")
+        modal.grab_set()
+
+        ctk.CTkLabel(modal, text="New Type of Abuse", font=("Arial", 12, "bold")).pack(pady=(12, 6), anchor="w", padx=16)
+        entry = ctk.CTkEntry(modal, placeholder_text="Enter new abuse type name", height=36)
+        entry.pack(fill="x", padx=16)
+
+        err_label = ctk.CTkLabel(modal, text="", text_color="#dc2626")
+        err_label.pack(pady=(6, 0))
+
+        btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=12)
+
+        def do_cancel():
+            modal.destroy()
+
+        def do_save():
+            name = entry.get().strip()
+            if not name:
+                err_label.configure(text="Name cannot be empty")
+                return
+            existing = [x.lower() for x in self.abuse_order]
+            if name.lower() in existing:
+                err_label.configure(text="Type already exists")
+                return
+            try:
+                add_abuse_type(name)
+                self.abuse_order = get_abuse_types()
+                self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+                modal.destroy()
+            except ValueError as ve:
+                err_label.configure(text=str(ve))
+            except Exception:
+                err_label.configure(text="Failed to save new type")
+
+        ctk.CTkButton(btn_frame, text="Save", fg_color="#1a2a4a", command=do_save).pack(side="right", padx=(8,0))
+        ctk.CTkButton(btn_frame, text="Cancel", fg_color="transparent", command=do_cancel).pack(side="right")
+
+    def open_edit_type_modal(self, current_name):
+        modal = ctk.CTkToplevel(self)
+        modal.title("Edit Abuse Type")
+        modal.geometry("420x150")
+        modal.grab_set()
+
+        ctk.CTkLabel(modal, text="Edit Type of Abuse", font=("Arial", 12, "bold")).pack(pady=(12, 6), anchor="w", padx=16)
+        entry = ctk.CTkEntry(modal, placeholder_text="Enter updated type name", height=36)
+        entry.insert(0, current_name)
+        entry.pack(fill="x", padx=16)
+
+        err_label = ctk.CTkLabel(modal, text="", text_color="#dc2626")
+        err_label.pack(pady=(6, 0))
+
+        btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=12)
+
+        def do_cancel():
+            modal.destroy()
+
+        def do_save():
+            new_name = entry.get().strip()
+            if not new_name:
+                err_label.configure(text="Name cannot be empty")
+                return
+            try:
+                update_abuse_type(current_name, new_name)
+                var = self.abuse_vars.pop(current_name, None)
+                if var is not None:
+                    self.abuse_vars[new_name] = var
+                self.abuse_order = get_abuse_types()
+                self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+                messagebox.showinfo("Success", f"'{current_name}' updated to '{new_name}'")
+                modal.destroy()
+            except ValueError as ve:
+                err_label.configure(text=str(ve))
+            except Exception:
+                err_label.configure(text="Failed to update type")
+
+        ctk.CTkButton(btn_frame, text="Save", fg_color="#1a2a4a", command=do_save).pack(side="right", padx=(8,0))
+        ctk.CTkButton(btn_frame, text="Cancel", fg_color="transparent", command=do_cancel).pack(side="right")
+
+    def confirm_delete_type(self, abuse_name):
+        if not messagebox.askyesno("Delete Abuse Type", f"Are you sure you want to delete '{abuse_name}'? This cannot be undone."):
+            return
+        try:
+            delete_abuse_type(abuse_name)
+            self.abuse_order = [a for a in self.abuse_order if a.lower() != abuse_name.lower()]
+            self.abuse_vars.pop(abuse_name, None)
+            self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+            messagebox.showinfo("Deleted", f"'{abuse_name}' has been deleted")
+        except ValueError as ve:
+            messagebox.showwarning("Cannot Delete", str(ve))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def update_pill_style_direct(self, abuse, pill, var):
         if var.get():

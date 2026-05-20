@@ -243,7 +243,7 @@ class MainWindow(ctk.CTk):
         if not self.check_unsaved_changes(): return
         self.page_title.configure(text="VAWC Logs")
         self.clear_content()
-        self.current_frame = LogsTabFrame(self.content, self.username)
+        self.current_frame = LogsTabFrame(self.content, self.username, self.user_role)
         self.current_frame.pack(fill="both", expand=True)
         self.set_active_nav(self.nav_buttons[1])
 
@@ -251,7 +251,7 @@ class MainWindow(ctk.CTk):
         if not self.check_unsaved_changes(): return
         self.page_title.configure(text="Add New Record")
         self.clear_content()
-        self.current_frame = AddRecordFrame(self.content, self.username, on_save=self.show_logs)
+        self.current_frame = AddRecordFrame(self.content, self.username, self.user_role, on_save=self.show_logs)
         self.current_frame.pack(fill="both", expand=True)
         self.set_active_nav(self.nav_buttons[2])
 

@@ -23,8 +23,9 @@ def open_file_cross_platform(file_path):
         messagebox.showerror("Error", f"Could not open file: {str(e)}")
 
 class ViewRecordWindow(ctk.CTkToplevel):
-    def __init__(self, parent, vawc_no, on_edit_saved=None):
+    def __init__(self, parent, vawc_no, user_role="Staff", on_edit_saved=None):
         super().__init__(parent)
+        self.user_role = user_role
         self.on_edit_saved = on_edit_saved
         self.title("View Record")
         self.attributes("-fullscreen", True)  # Always full screen
@@ -148,7 +149,7 @@ class ViewRecordWindow(ctk.CTkToplevel):
 
     def open_edit_record(self, vawc_no):
         self.destroy()
-        EditRecordWindow(self.master, vawc_no, on_save=self.on_edit_saved)
+        EditRecordWindow(self.master, vawc_no, user_role=self.user_role, on_save=self.on_edit_saved)
 
     def display_attachment(self, parent_frame, file_path):
         import os

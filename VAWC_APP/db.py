@@ -171,9 +171,150 @@ def init_db():
                                f"Passcode: {default_passcode}\n\n"
                                f"Please save these credentials securely and change them after your first login.")
 
+        # Create abuse_types table and seed defaults if empty
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS abuse_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL
+            )
+        """)
+
+        try:
+            cursor.execute("SELECT COUNT(*) FROM abuse_types")
+            count = cursor.fetchone()[0]
+        except Exception:
+            count = 0
+
+        if count == 0:
+            default_types = [
+                "Domestic Abuse", "Financial Abuse", "Material Abuse", "Modern Slavery",
+                "Criminal Exploitation", "Neglect", "Acts of Omission", "Organisational Abuse",
+                "Self-Neglect", "Hoarding", "Sexual Abuse", "Sexual Exploitation",
+                "Emotional Abuse", "Psychological Abuse"
+            ]
+            for t in default_types:
+                try:
+                    cursor.execute("INSERT INTO abuse_types (name) VALUES (?)", (t,))
+                except sqlite3.IntegrityError:
+                    pass
+
         connection.commit()
     except sqlite3.Error as e:
         raise Exception(f"Database initialization failed: {str(e)}")
+    finally:
+        if connection:
+            connection.close()
+
+def get_abuse_types():
+    connection = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT name FROM abuse_types ORDER BY name")
+        rows = cursor.fetchall()
+        return [r[0] for r in rows]
+    except Exception:
+        # Fallback to common list if DB read fails
+        return [
+            "Domestic Abuse", "Financial Abuse", "Material Abuse", "Modern Slavery",
+            "Criminal Exploitation", "Neglect", "Acts of Omission", "Organisational Abuse",
+            "Self-Neglect", "Hoarding", "Sexual Abuse", "Sexual Exploitation",
+            "Emotional Abuse", "Psychological Abuse"
+        ]
+    finally:
+        if connection:
+            connection.close()
+
+def add_abuse_type(name):
+    if not name or not name.strip():
+        raise ValueError("Name cannot be empty")
+    name = name.strip()
+    connection = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1 FROM abuse_types WHERE LOWER(name)=LOWER(?)", (name,))
+        if cursor.fetchone():
+            raise ValueError("Abuse type already exists")
+        cursor.execute("INSERT INTO abuse_types (name) VALUES (?)", (name,))
+        connection.commit()
+        return True
+    finally:
+        if connection:
+            connection.close()
+
+
+def is_abuse_type_in_use(name):
+    if not name or not name.strip():
+        return False
+    name = name.strip()
+    connection = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM vawc_logs WHERE is_deleted = 0 AND (type_of_abuse = ? OR type_of_abuse LIKE ? OR type_of_abuse LIKE ? OR type_of_abuse LIKE ?)",
+            (name, f"{name}, %", f"%, {name}", f"%, {name}, %")
+        )
+        return cursor.fetchone()[0] > 0
+    finally:
+        if connection:
+            connection.close()
+
+
+def update_abuse_type(old_name, new_name):
+    if not old_name or not old_name.strip():
+        raise ValueError("Original name cannot be empty")
+    if not new_name or not new_name.strip():
+        raise ValueError("New name cannot be empty")
+    old_name = old_name.strip()
+    new_name = new_name.strip()
+    connection = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT id FROM abuse_types WHERE LOWER(name)=LOWER(?)", (old_name,))
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError("Abuse type not found")
+        type_id = row[0]
+        cursor.execute("SELECT 1 FROM abuse_types WHERE LOWER(name)=LOWER(?) AND id != ?", (new_name, type_id))
+        if cursor.fetchone():
+            raise ValueError("Abuse type already exists")
+        cursor.execute("UPDATE abuse_types SET name = ? WHERE id = ?", (new_name, type_id))
+
+        cursor.execute(
+            "SELECT id, type_of_abuse FROM vawc_logs WHERE is_deleted = 0 AND (type_of_abuse = ? OR type_of_abuse LIKE ? OR type_of_abuse LIKE ? OR type_of_abuse LIKE ?)",
+            (old_name, f"{old_name}, %", f"%, {old_name}", f"%, {old_name}, %")
+        )
+        rows = cursor.fetchall()
+        for record_id, type_of_abuse in rows:
+            parts = [p.strip() for p in type_of_abuse.split(",") if p.strip()]
+            updated_parts = [new_name if p.lower() == old_name.lower() else p for p in parts]
+            cursor.execute("UPDATE vawc_logs SET type_of_abuse = ? WHERE id = ?", (", ".join(updated_parts), record_id))
+
+        connection.commit()
+        return True
+    finally:
+        if connection:
+            connection.close()
+
+
+def delete_abuse_type(name):
+    if not name or not name.strip():
+        raise ValueError("Name cannot be empty")
+    name = name.strip()
+    if is_abuse_type_in_use(name):
+        raise ValueError("This type is in use and cannot be deleted")
+    connection = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("DELETE FROM abuse_types WHERE LOWER(name)=LOWER(?)", (name,))
+        if cursor.rowcount == 0:
+            raise ValueError("Abuse type not found")
+        connection.commit()
+        return True
     finally:
         if connection:
             connection.close()

@@ -3,6 +3,7 @@ bcrypt
 tkcalendar
 reportlab
 openpyxl
-Pillow
+Pillow>=9.1
 matplotlib
 # Removed mysql-connector-python as it is not used in this project
+requests

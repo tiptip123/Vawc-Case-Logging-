@@ -4,12 +4,14 @@ from tkinter import messagebox, filedialog
 from tkcalendar import DateEntry
 from datetime import datetime
 from db import get_connection
+from db import get_abuse_types, add_abuse_type, update_abuse_type, delete_abuse_type
 from utils.helpers import calculate_age
 
 class EditRecordWindow(ctk.CTkToplevel):
-    def __init__(self, parent, vawc_no, on_save=None):
+    def __init__(self, parent, vawc_no, user_role="Staff", on_save=None):
         super().__init__(parent)
         self.on_save = on_save
+        self.user_role = user_role
         self.title("Edit Record")
         self.attributes("-fullscreen", True)  # Always full screen
         self.configure(fg_color=["#f5f5f5", "#1a1a1a"])
@@ -78,14 +80,11 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(form_frame, text="Type of Abuse", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         self.abuse_vars = {}
-        abuses = ["Physical", "Sexual", "Psychological", "Economic", "Settled", "Issued BPO"]
+        self.abuse_order = get_abuse_types()
         existing_abuses = set(self.record[8].split(", ")) if self.record[8] else set()
-        abuse_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
-        abuse_frame.pack(fill="x", padx=10, pady=(0, 10))
-        for abuse in abuses:
-            var = ctk.BooleanVar(value=abuse in existing_abuses)
-            self.abuse_vars[abuse] = var
-            ctk.CTkCheckBox(abuse_frame, text=abuse, variable=var, text_color=["black", "white"]).pack(anchor="w", pady=2)
+        self.abuse_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
+        self.abuse_frame.pack(fill="x", padx=10, pady=(0, 10))
+        self.render_abuse_grid(existing_abuses)
 
         ctk.CTkLabel(form_frame, text="Name of Respondent", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         self.respondent_entry = ctk.CTkEntry(form_frame, placeholder_text="Name of Respondent", border_width=2, corner_radius=8, text_color=["black", "white"])
@@ -136,6 +135,136 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         self.btn_cancel = ctk.CTkButton(button_frame, text="Cancel", fg_color="#6c757d", hover_color="#5a6268", command=self.destroy)
         self.btn_cancel.pack(side="right", padx=(10, 0), pady=5, ipadx=10)
+
+    def render_abuse_grid(self, existing_abuses=None):
+        existing_abuses = existing_abuses or set()
+        self.abuse_order = get_abuse_types()
+        for widget in self.abuse_frame.winfo_children():
+            widget.destroy()
+
+        for i, abuse in enumerate(self.abuse_order):
+            selected = abuse in existing_abuses
+            var = self.abuse_vars.get(abuse) or ctk.BooleanVar(value=selected)
+            self.abuse_vars[abuse] = var
+            pill = ctk.CTkFrame(self.abuse_frame, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#dce4ee", "#333333"], corner_radius=20)
+            pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
+            self.abuse_frame.grid_columnconfigure(i%4, weight=1)
+            cb = ctk.CTkCheckBox(pill, text=abuse, variable=var, text_color=["black", "white"], checkbox_width=18, checkbox_height=18, command=lambda a=abuse, p=pill, v=var: self.update_pill_style(a, p, v))
+            cb.pack(padx=15, pady=8, side="left")
+            var._pill_widget = pill
+
+            if self.user_role == 'Admin':
+                controls_frame = ctk.CTkFrame(pill, fg_color="transparent")
+                edit_btn = ctk.CTkButton(controls_frame, text="Edit", width=52, height=28, fg_color="transparent", hover_color="#e2e8f0", text_color="#475569", command=lambda a=abuse: self.open_edit_type_modal(a))
+                delete_btn = ctk.CTkButton(controls_frame, text="Delete", width=58, height=28, fg_color="transparent", hover_color="#fee2e2", text_color="#b91c1c", command=lambda a=abuse: self.confirm_delete_type(a))
+                edit_btn.pack(side="left", padx=(0, 4))
+                delete_btn.pack(side="left", padx=(0, 4))
+                controls_frame.pack(side="right", padx=(0, 10), pady=8)
+
+        if self.user_role == 'Admin':
+            i = len(self.abuse_order)
+            add_pill = ctk.CTkFrame(self.abuse_frame, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#dce4ee", "#333333"], corner_radius=20)
+            add_pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
+            self.abuse_frame.grid_columnconfigure(i%4, weight=1)
+            add_btn = ctk.CTkButton(add_pill, text="+ Add New Type", fg_color="transparent", text_color=["#1a2a4a", "#f8fafc"], border_width=1, border_color=["#94a3b8", "#6b7280"], command=self.open_add_type_modal)
+            add_btn.pack(padx=15, pady=8, fill="x")
+
+    def open_add_type_modal(self):
+        modal = ctk.CTkToplevel(self)
+        modal.title("Add New Type of Abuse")
+        modal.geometry("420x140")
+        modal.grab_set()
+
+        ctk.CTkLabel(modal, text="New Type of Abuse", font=("Arial", 12, "bold")).pack(pady=(12, 6), anchor="w", padx=16)
+        entry = ctk.CTkEntry(modal, placeholder_text="Enter new abuse type name", height=36)
+        entry.pack(fill="x", padx=16)
+
+        err_label = ctk.CTkLabel(modal, text="", text_color="#dc2626")
+        err_label.pack(pady=(6, 0))
+
+        btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=12)
+
+        def do_cancel():
+            modal.destroy()
+
+        def do_save():
+            name = entry.get().strip()
+            if not name:
+                err_label.configure(text="Name cannot be empty")
+                return
+            existing = [x.lower() for x in self.abuse_order]
+            if name.lower() in existing:
+                err_label.configure(text="Type already exists")
+                return
+            try:
+                add_abuse_type(name)
+                self.abuse_order = get_abuse_types()
+                self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+                modal.destroy()
+            except ValueError as ve:
+                err_label.configure(text=str(ve))
+            except Exception:
+                err_label.configure(text="Failed to save new type")
+
+        ctk.CTkButton(btn_frame, text="Save", fg_color="#1a2a4a", command=do_save).pack(side="right", padx=(8,0))
+        ctk.CTkButton(btn_frame, text="Cancel", fg_color="transparent", command=do_cancel).pack(side="right")
+
+    def open_edit_type_modal(self, current_name):
+        modal = ctk.CTkToplevel(self)
+        modal.title("Edit Abuse Type")
+        modal.geometry("420x150")
+        modal.grab_set()
+
+        ctk.CTkLabel(modal, text="Edit Type of Abuse", font=("Arial", 12, "bold")).pack(pady=(12, 6), anchor="w", padx=16)
+        entry = ctk.CTkEntry(modal, placeholder_text="Enter updated type name", height=36)
+        entry.insert(0, current_name)
+        entry.pack(fill="x", padx=16)
+
+        err_label = ctk.CTkLabel(modal, text="", text_color="#dc2626")
+        err_label.pack(pady=(6, 0))
+
+        btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=16, pady=12)
+
+        def do_cancel():
+            modal.destroy()
+
+        def do_save():
+            new_name = entry.get().strip()
+            if not new_name:
+                err_label.configure(text="Name cannot be empty")
+                return
+            try:
+                update_abuse_type(current_name, new_name)
+                var = self.abuse_vars.pop(current_name, None)
+                if var is not None:
+                    self.abuse_vars[new_name] = var
+                self.abuse_order = get_abuse_types()
+                self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+                messagebox.showinfo("Success", f"'{current_name}' updated to '{new_name}'")
+                modal.destroy()
+            except ValueError as ve:
+                err_label.configure(text=str(ve))
+            except Exception:
+                err_label.configure(text="Failed to update type")
+
+        ctk.CTkButton(btn_frame, text="Save", fg_color="#1a2a4a", command=do_save).pack(side="right", padx=(8,0))
+        ctk.CTkButton(btn_frame, text="Cancel", fg_color="transparent", command=do_cancel).pack(side="right")
+
+    def confirm_delete_type(self, abuse_name):
+        if not messagebox.askyesno("Delete Abuse Type", f"Are you sure you want to delete '{abuse_name}'? This cannot be undone."):
+            return
+        try:
+            delete_abuse_type(abuse_name)
+            self.abuse_order = [a for a in self.abuse_order if a.lower() != abuse_name.lower()]
+            self.abuse_vars.pop(abuse_name, None)
+            self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+            messagebox.showinfo("Deleted", f"'{abuse_name}' has been deleted")
+        except ValueError as ve:
+            messagebox.showwarning("Cannot Delete", str(ve))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def on_status_change(self, choice):
         if choice == "Referred":

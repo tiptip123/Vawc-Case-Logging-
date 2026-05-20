@@ -25,7 +25,11 @@ def make_circle_image(base64_str_or_path, size=64):
             img_data = base64.b64decode(base64_str_or_path)
             img = Image.open(io.BytesIO(img_data)).convert("RGBA")
             
-        img = img.resize((size, size), Image.Resampling.LANCZOS)
+        try:
+            resample = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample = Image.LANCZOS
+        img = img.resize((size, size), resample)
         
         # Create circular mask
         mask = Image.new("L", (size, size), 0)
