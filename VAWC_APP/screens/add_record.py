@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import os
+import re
 import json
 from tkinter import messagebox, filedialog
 from tkcalendar import DateEntry
@@ -36,17 +37,13 @@ class AddRecordFrame(ctk.CTkFrame):
         ctk.CTkLabel(title_frame, text="Add New Record", font=("Arial", 22, "bold"), text_color="white").pack(anchor="w")
         ctk.CTkLabel(title_frame, text="All required fields are marked with *", font=("Arial", 12), text_color=["#94a3b8", "#cbd5e1"]).pack(anchor="w")
 
-        # Right side VAWC No preview
-        self.vawc_preview = ctk.CTkLabel(self.header_banner, text="Will be assigned: VAWC-2026-XXXX", 
-                                        font=("Arial", 12, "bold"), text_color="#cbd5e1", 
-                                        fg_color=["#1e3a5f", "#1a2a4a"], corner_radius=6, padx=12, pady=6)
-        self.vawc_preview.pack(side="right", padx=30)
-
         # Content Container
         self.content_frame = ctk.CTkFrame(self.form_card, fg_color="transparent")
         self.content_frame.pack(fill="x", padx=30, pady=30)
 
         self.setup_form_fields()
+        self.update_vawc_format()
+        self.update_vawc_preview()
 
         # Auto-save Draft Timer
         self.draft_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "draft_record.json")
@@ -67,6 +64,7 @@ class AddRecordFrame(ctk.CTkFrame):
                 "respondent": self.respondent_entry.get(),
                 "remarks": self.remarks_text.get("1.0", "end"),
                 "status": self.case_status_var.get(),
+                "vawc_seq": self.vawc_seq_entry.get().strip(),
                 "timestamp": datetime.now().isoformat()
             }
             with open(self.draft_file, "w") as f:
@@ -82,6 +80,7 @@ class AddRecordFrame(ctk.CTkFrame):
                     if data.get("client_name") or data.get("respondent"):
                         if messagebox.askyesno("Restore Draft", "A previous unsaved record was found. Would you like to restore it?"):
                             self.client_entry.insert(0, data.get("client_name", ""))
+                            self.vawc_seq_entry.insert(0, data.get("vawc_seq", ""))
                             self.birthdate_entry.insert(0, data.get("birthdate", ""))
                             self.contact_entry.insert(0, data.get("contact", ""))
                             self.address_text.insert("1.0", data.get("address", ""))
@@ -89,6 +88,7 @@ class AddRecordFrame(ctk.CTkFrame):
                             self.remarks_text.insert("1.0", data.get("remarks", ""))
                             self.case_status_var.set(data.get("status", "Settled"))
                             self.update_status_style(data.get("status", "Settled"))
+                            self.update_vawc_preview()
         except (IOError, json.JSONDecodeError):
             pass
 
@@ -104,7 +104,7 @@ class AddRecordFrame(ctk.CTkFrame):
 
         # 👤 Client Information Section
         self.create_section("Client Information", "👤")
-        
+
         row1 = ctk.CTkFrame(self.content_frame, fg_color="transparent")
         row1.pack(fill="x", pady=5)
         row1.grid_columnconfigure((0, 1), weight=1)
@@ -115,11 +115,33 @@ class AddRecordFrame(ctk.CTkFrame):
         ctk.CTkLabel(col1_1, text="Date of Report *", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(anchor="w", pady=(0, 5))
         self.date_entry = DateEntry(col1_1, date_pattern="mm/dd/yyyy", font=("Arial", 11))
         self.date_entry.pack(fill="x", ipady=5)
+        self.date_entry.bind("<<DateEntrySelected>>", self.update_vawc_format)
+        self.date_entry.bind("<KeyRelease>", self.on_report_date_key)
+        self.date_entry.bind("<FocusOut>", self.on_report_date_focus_out)
 
         # Client Name
         col1_2, self.client_entry = create_field(row1, "Client Name", "Full name of client")
         col1_2.grid(row=0, column=1, sticky="nsew")
         self.client_entry.bind("<KeyRelease>", self.check_repeat_victim)
+
+        row0 = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        row0.pack(fill="x", pady=5)
+        ctk.CTkLabel(row0, text="VAWC Number *", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(anchor="w", pady=(0, 5))
+
+        vawc_row = ctk.CTkFrame(row0, fg_color="transparent")
+        vawc_row.pack(fill="x")
+        ctk.CTkLabel(vawc_row, text="VAWC-", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"]).grid(row=0, column=0, padx=(0, 4))
+        self.vawc_year_label = ctk.CTkLabel(vawc_row, text=str(datetime.now().year), font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"])
+        self.vawc_year_label.grid(row=0, column=1, padx=(0, 4))
+        ctk.CTkLabel(vawc_row, text="-", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"]).grid(row=0, column=2, padx=(0, 4))
+        self.vawc_seq_entry = ctk.CTkEntry(vawc_row, placeholder_text=self.get_next_vawc_sequence_placeholder(), height=42, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"])
+        self.vawc_seq_entry.grid(row=0, column=3, sticky="ew")
+        vawc_row.grid_columnconfigure(3, weight=1)
+        self.vawc_seq_entry.bind("<KeyRelease>", self.on_vawc_seq_key_release)
+        self.vawc_seq_entry.bind("<FocusOut>", self.on_vawc_seq_focus_out)
+
+        self.latest_vawc_label = ctk.CTkLabel(row0, text="Latest VAWC No: fetching...", font=("Arial", 11), text_color=["#64748b", "#cbd5e1"], fg_color="transparent")
+        self.latest_vawc_label.pack(anchor="w", pady=(8, 0))
 
         # Repeat Victim Warning Banner (Hidden by default)
         self.victim_warning = ctk.CTkFrame(self.content_frame, fg_color=["#fff3cd", "#332b00"], border_width=1, border_color=["#ffeeba", "#665500"], corner_radius=8, height=40)
@@ -402,6 +424,135 @@ class AddRecordFrame(ctk.CTkFrame):
             self.referred_to_entry.delete(0, "end")
             self.referred_to_entry.configure(state="disabled", fg_color="#f1f5f9", border_color="#e2e8f0")
 
+    def update_vawc_preview(self, event=None):
+        try:
+            year = self.date_entry.get_date().year
+            latest = self.get_latest_vawc_number(year)
+            latest_text = f"Latest VAWC No: {latest}" if latest else f"Latest VAWC No: none yet for {year}"
+            self.latest_vawc_label.configure(text=latest_text)
+        except Exception:
+            if hasattr(self, 'latest_vawc_label'):
+                self.latest_vawc_label.configure(text="Latest VAWC No: unavailable")
+
+    def on_vawc_seq_key_release(self, event=None):
+        # Allow only digits in sequence entry
+        cur = self.vawc_seq_entry.get()
+        digits = ''.join(ch for ch in cur if ch.isdigit())
+        if digits != cur:
+            self.vawc_seq_entry.delete(0, 'end')
+            self.vawc_seq_entry.insert(0, digits)
+        # update latest display
+        self.update_vawc_preview()
+
+    def on_vawc_seq_focus_out(self, event=None):
+        cur = self.vawc_seq_entry.get().strip()
+        if cur.isdigit():
+            self.vawc_seq_entry.delete(0, 'end')
+            self.vawc_seq_entry.insert(0, f"{int(cur):04d}")
+
+    def on_report_date_key(self, event=None):
+        current = self.date_entry.get().strip()
+        digits = ''.join(ch for ch in current if ch.isdigit())
+        formatted = ""
+        for idx, ch in enumerate(digits):
+            if idx == 2 or idx == 4:
+                formatted += "/"
+            formatted += ch
+        if formatted != current:
+            self.date_entry.delete(0, 'end')
+            self.date_entry.insert(0, formatted)
+
+    def on_report_date_focus_out(self, event=None):
+        date_str = self.date_entry.get().strip()
+        if not date_str:
+            return
+        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y", "%Y-%m-%d"):
+            try:
+                parsed = datetime.strptime(date_str, fmt)
+                self.date_entry.set_date(parsed)
+                self.update_vawc_format()
+                return
+            except ValueError:
+                continue
+
+    def get_next_vawc_sequence_placeholder(self):
+        # Determines next sequence for current year
+        try:
+            year = self.date_entry.get_date().year
+            connection = get_connection()
+            cursor = connection.cursor()
+            prefix = f"VAWC-{year}-"
+            cursor.execute("SELECT MAX(vawc_no) FROM vawc_logs WHERE vawc_no LIKE ? AND is_deleted = 0", (prefix + '%',))
+            row = cursor.fetchone()
+            if row and row[0]:
+                last = int(row[0].split('-')[-1])
+                return f"{last+1:04d}"
+            return "0001"
+        except Exception:
+            return "0001"
+
+    def update_vawc_format(self, event=None):
+        # Update year label and placeholder when date changes
+        year = self.date_entry.get_date().year
+        self.vawc_year_label.configure(text=str(year))
+        # Update placeholder to next seq for that year if possible
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            prefix = f"VAWC-{year}-"
+            cursor.execute("SELECT MAX(vawc_no) FROM vawc_logs WHERE vawc_no LIKE ? AND is_deleted = 0", (prefix + '%',))
+            row = cursor.fetchone()
+            if row and row[0]:
+                nxt = int(row[0].split('-')[-1]) + 1
+                self.vawc_seq_entry.configure(placeholder_text=f"{nxt:04d}")
+            else:
+                self.vawc_seq_entry.configure(placeholder_text="0001")
+        except Exception:
+            self.vawc_seq_entry.configure(placeholder_text="0001")
+        self.update_vawc_preview()
+
+    def normalize_vawc_no(self, value, report_date=None):
+        if report_date is None:
+            report_date = datetime.now()
+        value = (value or "").strip().upper().replace(" ", "")
+        if not value:
+            return ""
+
+        match = re.match(r'^(?:VAWC-)?(\d{4})-(\d+)$', value)
+        if match:
+            year = match.group(1)
+            num = int(match.group(2))
+            return f"VAWC-{year}-{num:04d}"
+
+        match = re.match(r'^(\d{4})$', value)
+        if match:
+            num = int(match.group(1))
+            return f"VAWC-{report_date.year}-{num:04d}"
+
+        match = re.match(r'^(\d+)$', value)
+        if match:
+            num = int(match.group(1))
+            return f"VAWC-{report_date.year}-{num:04d}"
+
+        return value
+
+    def get_latest_vawc_number(self, year=None):
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            if year is None:
+                year = self.date_entry.get_date().year
+            prefix = f"VAWC-{year}-"
+            cursor.execute("SELECT vawc_no FROM vawc_logs WHERE vawc_no LIKE ? AND is_deleted = 0 ORDER BY created_at DESC, id DESC LIMIT 1", (prefix + '%',))
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception:
+            return None
+        finally:
+            if connection:
+                connection.close()
+
     def update_pill_style(self, abuse, pill, var):
         if var.get():
             pill.configure(fg_color="#1a2a4a", border_width=0)
@@ -505,6 +656,7 @@ class AddRecordFrame(ctk.CTkFrame):
         self.contact_entry.delete(0, "end")
         self.birthdate_entry.delete(0, "end")
         self.birthdate_entry.configure(border_color="#dce4ee")
+        self.vawc_seq_entry.delete(0, "end")
         self.address_text.delete("1.0", "end")
         
         # Reset abuse pills
@@ -522,6 +674,8 @@ class AddRecordFrame(ctk.CTkFrame):
         self.attachments = []
         self.refresh_file_list()
         self.remarks_text.delete("1.0", "end")
+        self.vawc_year_label.configure(text=str(self.date_entry.get_date().year))
+        self.vawc_seq_entry.configure(placeholder_text=self.get_next_vawc_sequence_placeholder())
 
     def has_unsaved_changes(self):
         """Check if any primary field has input that hasn't been saved"""
@@ -597,12 +751,30 @@ class AddRecordFrame(ctk.CTkFrame):
 
         attachments_str = ";".join(final_attachments)
         abuses_str = ", ".join(abuses)
-        vawc_no = generate_vawc_number(date)
+        seq_value = self.vawc_seq_entry.get().strip()
+        if seq_value and seq_value.isdigit():
+            vawc_no = f"VAWC-{self.date_entry.get_date().year}-{int(seq_value):04d}"
+        else:
+            vawc_no = generate_vawc_number(date)
 
         connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
+
+            # If generated or entered VAWC already exists, fail gracefully or retry for auto-generated values.
+            cursor.execute("SELECT id FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+            existing = cursor.fetchone()
+            if existing:
+                if seq_value:
+                    messagebox.showwarning("Duplicate VAWC No", f"The VAWC Number {vawc_no} already exists. Please use a different VAWC Number.")
+                    return
+                vawc_no = generate_vawc_number(date)
+                cursor.execute("SELECT id FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+                if cursor.fetchone():
+                    messagebox.showwarning("VAWC Number Error", "Unable to generate a unique VAWC Number. Please try again.")
+                    return
+
             cursor.execute("""
                 INSERT INTO vawc_logs 
                 (vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, attachments, remarks, referred_to)
@@ -616,6 +788,7 @@ class AddRecordFrame(ctk.CTkFrame):
             log_action(self.username, "Add Record", target_record=vawc_no, details=f"Client: {client}")
             
             messagebox.showinfo("Success", f"Record saved successfully!\nVAWC No: {vawc_no}")
+            self.update_vawc_preview()
             
             # Remove draft if exists
             if os.path.exists(self.draft_file):

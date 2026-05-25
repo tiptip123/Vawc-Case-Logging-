@@ -60,7 +60,9 @@ def load_config():
         "region": "Region X",
         "office_name": "VAWC Desk",
         "contact_number": "0912-345-6789",
-        "email": "vawc.tankulan@gmail.com"
+        "email": "vawc.tankulan@gmail.com",
+        "appearance_mode": "light",
+        "font_scale": 1.0
     }
     try:
         if os.path.exists(config_path):
@@ -69,6 +71,10 @@ def load_config():
         return default_config
     except (IOError, json.JSONDecodeError):
         return default_config
+
+def get_scaled_font(size, weight="normal", scale=1.0):
+    scaled_size = max(int(size * scale), 10)
+    return ("Arial", scaled_size, weight)
 
 def save_config(config_data):
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")

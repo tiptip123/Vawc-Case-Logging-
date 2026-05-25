@@ -12,7 +12,7 @@ from .user_management import UserManagementFrame
 from .settings import SettingsFrame
 from .audit_logs import AuditLogFrame
 
-from utils.helpers import load_config, make_circle_image
+from utils.helpers import load_config, make_circle_image, save_config, get_scaled_font
 
 from db import get_connection
 
@@ -27,6 +27,7 @@ class MainWindow(ctk.CTk):
         # Apply Appearance Mode from Config
         mode = self.config.get("appearance_mode", "light")
         ctk.set_appearance_mode(mode)
+        self.font_scale = self.config.get("font_scale", 1.0)
         
         # Modern 2025 Dimensions
         self.geometry("1280x800")
@@ -77,8 +78,46 @@ class MainWindow(ctk.CTk):
         self.header.grid(row=0, column=1, sticky="ew")
         self.header.grid_propagate(False)
 
-        self.page_title = ctk.CTkLabel(self.header, text="Dashboard", font=("Arial", 18, "bold"), text_color=self.colors["text_primary"])
+        self.page_title = ctk.CTkLabel(self.header, text="Dashboard", font=get_scaled_font(18, "bold", self.font_scale), text_color=self.colors["text_primary"])
         self.page_title.pack(side="left", padx=30)
+
+        # Header controls for quick appearance and size adjustments
+        self.header_actions = ctk.CTkFrame(self.header, fg_color="transparent")
+        self.header_actions.pack(side="right", padx=20)
+
+        self.zoom_out_button = ctk.CTkButton(
+            self.header_actions,
+            text="A-",
+            width=42,
+            height=34,
+            corner_radius=8,
+            command=lambda: self.adjust_font_scale(-0.1),
+            font=get_scaled_font(11, "bold", self.font_scale)
+        )
+        self.zoom_out_button.pack(side="right", padx=(0, 8))
+
+        self.zoom_in_button = ctk.CTkButton(
+            self.header_actions,
+            text="A+",
+            width=42,
+            height=34,
+            corner_radius=8,
+            command=lambda: self.adjust_font_scale(0.1),
+            font=get_scaled_font(11, "bold", self.font_scale)
+        )
+        self.zoom_in_button.pack(side="right", padx=(0, 8))
+
+        current_mode = ctk.get_appearance_mode().capitalize()
+        self.theme_button = ctk.CTkButton(
+            self.header_actions,
+            text="🌙" if current_mode == "Light" else "☀️",
+            width=82,
+            height=34,
+            corner_radius=8,
+            command=self.toggle_theme,
+            font=get_scaled_font(11, "bold", self.font_scale)
+        )
+        self.theme_button.pack(side="right")
 
         # 3. CONTENT AREA
         self.content = ctk.CTkFrame(self, fg_color=self.colors["bg_light"], corner_radius=0)
@@ -100,9 +139,38 @@ class MainWindow(ctk.CTk):
         self.clock_label = ctk.CTkLabel(self.status_bar, text="", font=("Arial", 11), text_color=self.colors["text_secondary"])
         self.clock_label.pack(side="right", padx=10)
         self.update_clock()
+        self.update_fonts()
 
         self.current_frame = None
         self.show_dashboard()
+
+    def update_fonts(self):
+        self.page_title.configure(font=get_scaled_font(18, "bold", self.font_scale))
+        self.status_user_label.configure(font=get_scaled_font(11, "normal", self.font_scale))
+        self.db_status.configure(font=get_scaled_font(11, "normal", self.font_scale))
+        self.clock_label.configure(font=get_scaled_font(11, "normal", self.font_scale))
+        for btn in self.nav_buttons:
+            btn.configure(font=get_scaled_font(13, "normal", self.font_scale))
+        if hasattr(self, "theme_button"):
+            self.theme_button.configure(font=get_scaled_font(11, "bold", self.font_scale))
+            self.zoom_out_button.configure(font=get_scaled_font(11, "bold", self.font_scale))
+            self.zoom_in_button.configure(font=get_scaled_font(11, "bold", self.font_scale))
+
+    def toggle_theme(self):
+        current = ctk.get_appearance_mode().lower()
+        new_mode = "dark" if current == "light" else "light"
+        ctk.set_appearance_mode(new_mode)
+        self.config["appearance_mode"] = new_mode
+        save_config(self.config)
+        self.theme_button.configure(text="🌙" if new_mode == "light" else "☀️")
+        self.refresh_all_frames()
+
+    def adjust_font_scale(self, delta):
+        self.font_scale = min(max(self.font_scale + delta, 0.85), 1.5)
+        self.config["font_scale"] = round(self.font_scale, 2)
+        save_config(self.config)
+        self.update_fonts()
+        self.refresh_all_frames()
 
         # Keyboard Shortcuts
         self.bind_all("<Control-n>", lambda e: self.show_add_record())
@@ -251,7 +319,8 @@ class MainWindow(ctk.CTk):
         if not self.check_unsaved_changes(): return
         self.page_title.configure(text="Add New Record")
         self.clear_content()
-        self.current_frame = AddRecordFrame(self.content, self.username, self.user_role, on_save=self.show_logs)
+        # Do not redirect after save; keep user on Add Record page
+        self.current_frame = AddRecordFrame(self.content, self.username, self.user_role, on_save=None)
         self.current_frame.pack(fill="both", expand=True)
         self.set_active_nav(self.nav_buttons[2])
 
@@ -316,5 +385,6 @@ class MainWindow(ctk.CTk):
 
     def logout(self):
         self.destroy()
+        self.quit()
         from .login import LoginScreen
         LoginScreen().mainloop()

@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox, filedialog
 import os
+import sqlite3
 from tkcalendar import DateEntry
 from datetime import datetime
 from db import get_connection
@@ -153,7 +154,7 @@ class LogsTabFrame(ctk.CTkFrame):
 
         self.tree = ttk.Treeview(
             table_frame,
-            columns=("Select", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Respondent", "Case Status", "Referred To"),
+            columns=("Select", "ID", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Respondent", "Case Status", "Referred To"),
             show="headings",
             selectmode="browse"
         )
@@ -171,6 +172,7 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.tag_configure("status_referred", foreground="#2563eb") # Blue
 
         # Column alignment (readability)
+        self.tree.column("ID", width=70, anchor="center")
         self.tree.column("VAWC No", width=140, anchor="center")
         self.tree.column("Date", width=100, anchor="center")
         self.tree.column("Client Name", width=180, anchor="w")
@@ -183,6 +185,7 @@ class LogsTabFrame(ctk.CTkFrame):
 
         # Column Config
         self.tree.column("Select", width=40, anchor="center")
+        self.tree.column("ID", width=70, anchor="center")
         self.tree.column("VAWC No", width=140, anchor="w")
         self.tree.column("Date", width=100, anchor="center")
         self.tree.column("Client Name", width=180, anchor="w")
@@ -272,9 +275,9 @@ class LogsTabFrame(ctk.CTkFrame):
             params = []
 
             if self.search_term:
-                count_query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\')"
+                count_query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\' OR CAST(id AS TEXT) LIKE ? ESCAPE '\\')"
                 term = f"%{escape_like(self.search_term)}%"
-                params.extend([term, term, term])
+                params.extend([term, term, term, term])
 
             if self.filter_abuse:
                 count_query += " AND type_of_abuse LIKE ? ESCAPE '\\'"
@@ -301,11 +304,11 @@ class LogsTabFrame(ctk.CTkFrame):
                 self.page_label.configure(text=f"Page {self.page + 1} of {total_pages}")
 
             # Fetch data
-            query = "SELECT '☐', vawc_no, date, client_name, age, type_of_abuse, name_of_respondent, case_status, referred_to FROM vawc_logs WHERE is_deleted = 0"
+            query = "SELECT '☐', id, vawc_no, date, client_name, age, type_of_abuse, name_of_respondent, case_status, referred_to FROM vawc_logs WHERE is_deleted = 0"
 
             # Reuse filters from count_query
             if self.search_term:
-                query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\')"
+                query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\' OR CAST(id AS TEXT) LIKE ? ESCAPE '\\')"
             if self.filter_abuse:
                 query += " AND type_of_abuse LIKE ? ESCAPE '\\'"
             if self.filter_status:
@@ -326,18 +329,18 @@ class LogsTabFrame(ctk.CTkFrame):
 
             # Alternating row colors with checkbox state
             for i, row in enumerate(rows):
-                vawc_no = row[1]
+                vawc_no = row[2]
                 check_char = "☑" if vawc_no in self.selected_vawc_nos else "☐"
 
                 # Format Referred To with a symbol if present
-                ref_to = row[8]
+                ref_to = row[9]
                 display_ref = ref_to if ref_to and ref_to != "None" else ""
 
-                display_row = (check_char, row[1], row[2], row[3], row[4], row[5], row[6], row[7], display_ref)
+                display_row = (check_char, row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], display_ref)
                 tag = "evenrow" if i % 2 == 0 else "oddrow"
 
                 # Apply special tag for status colors
-                status = row[7]
+                status = row[8]
                 if status == "Ongoing":
                     tags = (tag, "status_ongoing")
                 elif status == "Settled":
@@ -385,7 +388,7 @@ class LogsTabFrame(ctk.CTkFrame):
         if selected:
             item = selected[0]
             values = self.tree.item(item, "values")
-            self.open_inline_edit(values[1]) # Use VAWC No
+            self.open_inline_edit(values[2]) # Use VAWC No
 
     def on_click(self, event):
         """Handle checkbox clicks in selection mode"""
@@ -398,7 +401,7 @@ class LogsTabFrame(ctk.CTkFrame):
             if column == "#1": # Select column
                 item = self.tree.identify_row(event.y)
                 if item:
-                    vawc_no = self.tree.item(item, "values")[1]
+                    vawc_no = self.tree.item(item, "values")[2]
                     if vawc_no in self.selected_vawc_nos:
                         self.selected_vawc_nos.remove(vawc_no)
                         self.tree.set(item, "Select", "☐")
@@ -424,7 +427,7 @@ class LogsTabFrame(ctk.CTkFrame):
                 cursor = connection.cursor()
                 vawc_nos = list(self.selected_vawc_nos)
                 cursor.executemany(
-                    "UPDATE vawc_logs SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?",
+                    "UPDATE vawc_logs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?",
                     [(vawc_no,) for vawc_no in vawc_nos]
                 )
                 cursor.executemany(
@@ -448,7 +451,7 @@ class LogsTabFrame(ctk.CTkFrame):
                 if not selected:
                     messagebox.showwarning("Warning", "Please select a record to edit.")
                     return
-                vawc_no = self.tree.item(selected[0], "values")[1]
+                vawc_no = self.tree.item(selected[0], "values")[2]
 
             # Log view action
             from db import log_action
@@ -570,6 +573,7 @@ class InlineEditPanel(ctk.CTkFrame):
         self.subtitle_label.configure(text="Update the information below and save changes" if editable else "Viewing record details")
 
         # Update Fields
+        self.vawc_no_entry.configure(state=state)
         self.date_entry.configure(state=state)
         self.client_entry.configure(state=state)
         self.birthdate_entry.configure(state=state)
@@ -602,7 +606,7 @@ class InlineEditPanel(ctk.CTkFrame):
         border_width = 2 if editable else 0
         text_color = ["black", "white"] if editable else ["#333333", "#cbd5e1"]
 
-        for widget in [self.client_entry, self.birthdate_entry, self.age_entry, self.contact_entry, self.respondent_entry]:
+        for widget in [self.vawc_no_entry, self.client_entry, self.birthdate_entry, self.age_entry, self.contact_entry, self.respondent_entry]:
             widget.configure(fg_color=input_bg, border_width=border_width, text_color=text_color)
         
         self.address_text.configure(fg_color=input_bg, border_width=border_width, text_color=text_color)
@@ -639,7 +643,24 @@ class InlineEditPanel(ctk.CTkFrame):
         def create_label(parent, text):
             return ctk.CTkLabel(parent, text=text, font=("Arial", 11, "bold"), text_color=["#1a2a4a", "#f8fafc"], anchor="w")
 
-        # Row 1: Date | Client Name
+        # Row 1: ID | VAWC No
+        row0 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
+        row0.pack(fill="x", pady=10)
+        row0.grid_columnconfigure((0, 1), weight=1)
+
+        col0_1 = ctk.CTkFrame(row0, fg_color="transparent", corner_radius=0)
+        col0_1.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
+        create_label(col0_1, "Record ID").pack(fill="x")
+        self.id_entry = ctk.CTkEntry(col0_1, border_width=2, height=38, border_color=["#dce4ee", "#333333"], state="disabled")
+        self.id_entry.pack(fill="x", pady=(5, 0))
+
+        col0_2 = ctk.CTkFrame(row0, fg_color="transparent", corner_radius=0)
+        col0_2.grid(row=0, column=1, sticky="nsew")
+        create_label(col0_2, "VAWC Number").pack(fill="x")
+        self.vawc_no_entry = ctk.CTkEntry(col0_2, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
+        self.vawc_no_entry.pack(fill="x", pady=(5, 0))
+
+        # Row 2: Date | Client Name
         row1 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
         row1.pack(fill="x", pady=10)
         row1.grid_columnconfigure((0, 1), weight=1)
@@ -799,6 +820,14 @@ class InlineEditPanel(ctk.CTkFrame):
         if self.record[2]:
             self.date_entry.set_date(datetime.strptime(self.record[2], "%Y-%m-%d"))
         
+        # ID
+        self.id_entry.delete(0, "end")
+        self.id_entry.insert(0, str(self.record[0]) if self.record[0] is not None else "")
+
+        # VAWC Number
+        self.vawc_no_entry.delete(0, "end")
+        self.vawc_no_entry.insert(0, self.record[1] or "")
+
         # Client Name
         self.client_entry.delete(0, "end")
         self.client_entry.insert(0, self.record[3] or "")
@@ -1098,8 +1127,13 @@ class InlineEditPanel(ctk.CTkFrame):
             date = self.date_entry.get_date()
             client = self.client_entry.get().strip()
             age = self.age_entry.get().strip()
+            vawc_no = self.vawc_no_entry.get().strip()
             contact = self.contact_entry.get().strip()
             
+            if not vawc_no:
+                messagebox.showerror("Error", "VAWC Number is required.")
+                return
+
             # Better birthdate parsing
             birthdate_str = self.birthdate_entry.get().strip()
             birthdate = None
@@ -1154,9 +1188,9 @@ class InlineEditPanel(ctk.CTkFrame):
             
             cursor.execute("""
                 UPDATE vawc_logs 
-                SET date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?, updated_at=CURRENT_TIMESTAMP
-                WHERE vawc_no=?
-            """, (date_str, client, age_int, contact, birthdate_db, address, abuses, respondent, status, attach, remarks, referred_to, self.vawc_no))
+                SET vawc_no=?, date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (vawc_no, date_str, client, age_int, contact, birthdate_db, address, abuses, respondent, status, attach, remarks, referred_to, self.record[0]))
             connection.commit()
 
             # Log edit action
@@ -1164,12 +1198,15 @@ class InlineEditPanel(ctk.CTkFrame):
             log_action(self.username, "Edit Record", target_record=self.vawc_no, details=f"Status: {status}")
             
             messagebox.showinfo("Success", "Record updated successfully.")
+            self.vawc_no = vawc_no
             
             # Update local record and return to view mode
             self.record = self.load_record()
             if self.record:
                 self.setup_field_values()
                 self.set_editable(False)
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "VAWC No already exists. Please choose a different VAWC number.")
         except Exception as e:
             messagebox.showerror("Error", str(e))
         finally:

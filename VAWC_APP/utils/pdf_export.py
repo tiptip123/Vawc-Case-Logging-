@@ -1,11 +1,16 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.lib import colors
 from tkinter import filedialog
 import os
 from datetime import datetime
 from db import get_connection
+
+PAGE_WIDTH, PAGE_HEIGHT = letter
+PAGE_MARGIN = 36
+AVAILABLE_PAGE_WIDTH = PAGE_WIDTH - (PAGE_MARGIN * 2)
 
 
 def parse_date(date_str):
@@ -18,6 +23,32 @@ def parse_date(date_str):
         except ValueError:
             continue
     return None
+
+
+def _escape_text(value):
+    if value is None:
+        return ""
+    text = str(value)
+    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br/>')
+
+
+def _get_table_col_widths(data, font_name='Helvetica', font_size=8, min_width=40):
+    col_count = len(data[0]) if data else 0
+    widths = [0] * col_count
+    for row in data:
+        for idx, cell in enumerate(row):
+            cell_text = _escape_text(cell)
+            width = stringWidth(cell_text, font_name, font_size) + 12
+            if width > widths[idx]:
+                widths[idx] = width
+
+    total = sum(widths)
+    if total <= AVAILABLE_PAGE_WIDTH:
+        return widths
+
+    scale = AVAILABLE_PAGE_WIDTH / total
+    return [max(min_width, w * scale) for w in widths]
+
 
 def normalize_record(record):
     if record is None:
@@ -55,15 +86,15 @@ def export_single_pdf(record):
     path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=filename, filetypes=[("PDF files", "*.pdf")])
     if not path:
         return None
-    doc = SimpleDocTemplate(path, pagesize=letter)
+    doc = SimpleDocTemplate(path, pagesize=letter, leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN, topMargin=PAGE_MARGIN, bottomMargin=PAGE_MARGIN)
     styles = getSampleStyleSheet()
-    elements = []
-
-    # Modern Header
     header_style = styles['Title']
     header_style.fontSize = 14
     header_style.textColor = colors.HexColor("#1a2a4a")
-    
+    table_header_style = ParagraphStyle('TableHeader', parent=styles['Heading6'], fontName='Helvetica-Bold', fontSize=8, leading=10)
+    table_body_style = ParagraphStyle('TableBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=8, leading=10)
+    elements = []
+
     elements.append(Paragraph("REPUBLIC OF THE PHILIPPINES", styles['Normal']))
     elements.append(Paragraph(f"PROVINCE OF {config['province'].upper()}", styles['Normal']))
     elements.append(Paragraph(f"MUNICIPALITY OF {config['municipality'].upper()}", styles['Normal']))
@@ -73,7 +104,7 @@ def export_single_pdf(record):
     elements.append(Paragraph(f"VAWC Case Report: {record['vawc_no']}", header_style))
     elements.append(Spacer(1, 15))
 
-    data = [
+    raw_data = [
         ["Field", "Details"],
         ["VAWC Number", record['vawc_no']],
         ["Date Reported", record['date'].strftime("%B %d, %Y") if record['date'] else ""],
@@ -88,7 +119,12 @@ def export_single_pdf(record):
         ["Remarks/Notes", record['remarks'] or "None"]
     ]
 
-    table = Table(data, colWidths=[150, 350])
+    table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]
+    for row in raw_data[1:]:
+        table_data.append([Paragraph(_escape_text(cell), table_body_style) for cell in row])
+
+    col_widths = _get_table_col_widths(raw_data, font_name='Helvetica', font_size=8)
+    table = Table(table_data, colWidths=col_widths)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1a2a4a")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -100,7 +136,9 @@ def export_single_pdf(record):
         ('BACKGROUND', (0, 1), (-1, -1), colors.white),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('PADDING', (0, 1), (-1, -1), 8)
+        ('LEFTPADDING', (0, 1), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 1), (-1, -1), 8),
+        ('WORDWRAP', (0, 0), (-1, -1), 'CJK')
     ]))
     elements.append(table)
     
@@ -121,8 +159,10 @@ def export_full_pdf():
     
     connection = None
     try:
-        doc = SimpleDocTemplate(path, pagesize=letter)
+        doc = SimpleDocTemplate(path, pagesize=letter, leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN, topMargin=PAGE_MARGIN, bottomMargin=PAGE_MARGIN)
         styles = getSampleStyleSheet()
+        table_header_style = ParagraphStyle('TableHeader', parent=styles['Heading6'], fontName='Helvetica-Bold', fontSize=8, leading=10)
+        table_body_style = ParagraphStyle('TableBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=8, leading=10)
         elements = []
 
         elements.append(Paragraph("REPUBLIC OF THE PHILIPPINES", styles['Normal']))
@@ -140,20 +180,24 @@ def export_full_pdf():
         cursor.execute("SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, remarks FROM vawc_logs WHERE is_deleted = 0 ORDER BY date DESC")
         rows = cursor.fetchall()
 
-        data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"]]
+        raw_data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"]]
         for row in rows:
-            # Only include key columns for full list to fit in page
-            data.append([
-                str(row[0]), 
-                str(row[1]), 
-                str(row[2]), 
-                str(row[3]), 
-                (str(row[7])[:20] + '...') if len(str(row[7])) > 20 else str(row[7]),
-                str(row[8]),
-                str(row[9])
+            raw_data.append([
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[7],
+                row[8],
+                row[9]
             ])
 
-        table = Table(data, colWidths=[90, 70, 100, 30, 100, 70, 90])
+        table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]
+        for row in raw_data[1:]:
+            table_data.append([Paragraph(_escape_text(cell), table_body_style) for cell in row])
+
+        col_widths = _get_table_col_widths(raw_data, font_name='Helvetica', font_size=8)
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1a2a4a")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -162,8 +206,11 @@ def export_full_pdf():
             ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP')
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('WORDWRAP', (0, 0), (-1, -1), 'CJK')
         ]))
         elements.append(table)
         doc.build(elements)
@@ -185,8 +232,10 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
     
     connection = None
     try:
-        doc = SimpleDocTemplate(path, pagesize=letter)
+        doc = SimpleDocTemplate(path, pagesize=letter, leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN, topMargin=PAGE_MARGIN, bottomMargin=PAGE_MARGIN)
         styles = getSampleStyleSheet()
+        table_header_style = ParagraphStyle('TableHeader', parent=styles['Heading6'], fontName='Helvetica-Bold', fontSize=8, leading=10)
+        table_body_style = ParagraphStyle('TableBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=8, leading=10)
         elements = []
 
         elements.append(Paragraph("REPUBLIC OF THE PHILIPPINES", styles['Normal']))
@@ -226,19 +275,24 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
-        data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"]]
+        raw_data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"]]
         for row in rows:
-            data.append([
-                str(row[0]), 
-                str(row[1]), 
-                str(row[2]), 
-                str(row[3]), 
-                (str(row[7])[:20] + '...') if len(str(row[7])) > 20 else str(row[7]),
-                str(row[8]),
-                str(row[9])
+            raw_data.append([
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[7],
+                row[8],
+                row[9]
             ])
 
-        table = Table(data, colWidths=[90, 70, 100, 30, 100, 70, 90])
+        table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]
+        for row in raw_data[1:]:
+            table_data.append([Paragraph(_escape_text(cell), table_body_style) for cell in row])
+
+        col_widths = _get_table_col_widths(raw_data, font_name='Helvetica', font_size=8)
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1a2a4a")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -247,8 +301,11 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
             ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP')
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('WORDWRAP', (0, 0), (-1, -1), 'CJK')
         ]))
         elements.append(table)
         doc.build(elements)

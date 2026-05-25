@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from tkcalendar import DateEntry
@@ -33,6 +34,16 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         form_frame = ctk.CTkFrame(self, fg_color=["#eef0f4", "#242424"])
         form_frame.pack(fill="both", expand=True, padx=15, pady=10)
+
+        ctk.CTkLabel(form_frame, text="Record ID", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(10, 2))
+        self.id_entry = ctk.CTkEntry(form_frame, placeholder_text="Record ID", border_width=2, corner_radius=8, text_color=["black", "white"], state="disabled")
+        self.id_entry.insert(0, str(self.record[0]) if self.record[0] is not None else "")
+        self.id_entry.pack(padx=10, pady=(0, 10), fill="x")
+
+        ctk.CTkLabel(form_frame, text="VAWC Number", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
+        self.vawc_no_entry = ctk.CTkEntry(form_frame, placeholder_text="VAWC Number", border_width=2, corner_radius=8, text_color=["black", "white"])
+        self.vawc_no_entry.insert(0, self.record[1] or "")
+        self.vawc_no_entry.pack(padx=10, pady=(0, 10), fill="x")
 
         ctk.CTkLabel(form_frame, text="Date of Report", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(10, 2))
         self.date_entry = DateEntry(form_frame, date_pattern="mm/dd/yyyy")
@@ -304,6 +315,11 @@ class EditRecordWindow(ctk.CTkToplevel):
         remarks = self.remarks_text.get("1.0", "end").strip()
         referred_to = self.referred_entry.get().strip()
 
+        vawc_no = self.vawc_no_entry.get().strip()
+        if not vawc_no:
+            messagebox.showerror("Error", "VAWC Number is required.")
+            return
+
         if not client:
             self.client_entry.configure(border_color="red")
             messagebox.showerror("Error", "Client Name is required.")
@@ -316,15 +332,18 @@ class EditRecordWindow(ctk.CTkToplevel):
             connection = get_connection()
             cursor = connection.cursor()
             cursor.execute("""
-                UPDATE vawc_logs SET date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?
-                WHERE vawc_no=?
-            """, (date, client, int(age) if age else None, contact, birthdate, address, type_of_abuse, respondent, case_status, attachments, remarks, referred_to, self.vawc_no))
+                UPDATE vawc_logs SET vawc_no=?, date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?
+                WHERE id=?
+            """, (vawc_no, date, client, int(age) if age else None, contact, birthdate, address, type_of_abuse, respondent, case_status, attachments, remarks, referred_to, self.record[0]))
             connection.commit()
+            self.vawc_no = vawc_no
             cursor.close()
             connection.close()
             messagebox.showinfo("Success", "Record updated.")
             if self.on_save:
                 self.on_save()
             self.destroy()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "VAWC Number already exists. Please enter a different VAWC number.")
         except Exception as e:
             messagebox.showerror("Error", str(e))

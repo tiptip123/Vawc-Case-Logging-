@@ -63,6 +63,7 @@ def init_db():
                 remarks TEXT,
                 referred_to TEXT,
                 is_deleted INTEGER DEFAULT 0,
+                deleted_at TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -76,6 +77,23 @@ def init_db():
         try:
             cursor.execute("ALTER TABLE vawc_logs ADD COLUMN is_deleted INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE vawc_logs ADD COLUMN deleted_at TEXT")
+        except sqlite3.OperationalError:
+            pass
+
+        # Clean expired trash records older than 15 days
+        try:
+            cursor.execute("""
+                DELETE FROM vawc_logs
+                WHERE is_deleted = 1
+                AND (
+                    (deleted_at IS NOT NULL AND julianday('now') - julianday(deleted_at) > 15)
+                    OR (deleted_at IS NULL AND julianday('now') - julianday(updated_at) > 15)
+                )
+            """)
+        except sqlite3.Error:
             pass
 
         # Create audit_logs table

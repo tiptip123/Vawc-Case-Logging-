@@ -1,6 +1,8 @@
 import sqlite3
 import shutil
 import os
+import re
+from datetime import datetime
 from db import DB_FILE
 
 def backup_database(output_path):
@@ -83,4 +85,88 @@ def restore_database(input_path):
         connection.close()
 
     except Exception as e:
+        raise Exception(f"Restore failed: {str(e)}")
+
+
+def _is_sqlite_file_hashed(sqlite_path):
+    try:
+        temp_conn = sqlite3.connect(sqlite_path)
+        temp_cursor = temp_conn.cursor()
+        temp_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        if temp_cursor.fetchone():
+            temp_cursor.execute("PRAGMA table_info(users)")
+            users_columns = [row[1] for row in temp_cursor.fetchall()]
+            if 'password_hash' in users_columns or 'security_answer' in users_columns:
+                temp_cursor.execute("SELECT password_hash, security_answer FROM users LIMIT 5")
+                for row in temp_cursor.fetchall():
+                    for value in row:
+                        if value is None:
+                            continue
+                        if isinstance(value, str) and value.strip() and not re.match(r"\$2[aby]\$.{56}$", value.strip()):
+                            return False
+        temp_cursor.close()
+        temp_conn.close()
+        return True
+    except Exception:
+        return True
+
+
+def _is_sql_dump_hashed(dump_path):
+    try:
+        with open(dump_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        if 'password_hash' in content or 'security_answer' in content:
+            if not re.search(r"\$2[aby]\$.{56}", content):
+                return False
+        return True
+    except Exception:
+        return True
+
+
+def validate_import_file(input_path):
+    lower = input_path.lower()
+    if lower.endswith('.sqlite'):
+        if not _is_sqlite_file_hashed(input_path):
+            raise Exception('The selected SQLite backup appears to contain unhashed credentials. Import aborted.')
+        return True
+    if lower.endswith('.sql'):
+        if not _is_sql_dump_hashed(input_path):
+            raise Exception('The selected SQL dump appears to contain unhashed credentials. Import aborted.')
+        return True
+    raise Exception('Unsupported import format. Please select a .sqlite or .sql file.')
+
+
+def restore_database(input_path):
+    """Restore SQLite database from SQL file or SQLite backup"""
+    validate_import_file(input_path)
+    backup_dir = os.path.join(os.path.dirname(DB_FILE), 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_path = os.path.join(backup_dir, f'vawc_db_before_import_{timestamp}.sqlite')
+
+    try:
+        if os.path.exists(DB_FILE):
+            shutil.copy2(DB_FILE, backup_path)
+
+        if input_path.lower().endswith('.sqlite'):
+            # Replace current DB with imported SQLite file
+            shutil.copy2(input_path, DB_FILE)
+            return
+
+        # For SQL dumps, load into a temporary DB and then replace current DB file
+        temp_db = os.path.join(os.path.dirname(DB_FILE), f'temp_import_{timestamp}.sqlite')
+        temp_conn = sqlite3.connect(temp_db)
+        temp_cursor = temp_conn.cursor()
+        with open(input_path, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+        temp_conn.executescript(sql_content)
+        temp_conn.commit()
+        temp_cursor.close()
+        temp_conn.close()
+
+        shutil.copy2(temp_db, DB_FILE)
+        os.remove(temp_db)
+    except Exception as e:
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, DB_FILE)
         raise Exception(f"Restore failed: {str(e)}")

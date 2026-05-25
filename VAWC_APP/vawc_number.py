@@ -15,7 +15,7 @@ def generate_vawc_number(report_date=None):
 
         cursor.execute("BEGIN EXCLUSIVE")
 
-        cursor.execute("SELECT MAX(vawc_no) FROM vawc_logs WHERE vawc_no LIKE ?", (prefix + '%',))
+        cursor.execute("SELECT MAX(vawc_no) FROM vawc_logs WHERE vawc_no LIKE ? AND is_deleted = 0", (prefix + '%',))
         result = cursor.fetchone()
 
         if result and result[0]:

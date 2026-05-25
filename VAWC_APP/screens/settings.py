@@ -7,6 +7,9 @@ import sys
 import subprocess
 from datetime import datetime
 
+from db import DB_FILE
+from utils.db_backup import validate_import_file, restore_database
+
 import threading
 import zipfile
 import io
@@ -270,7 +273,7 @@ class LGUConfigPanel(ctk.CTkFrame):
     def __init__(self, parent, main_window):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.main_window = main_window
-        self.settings = parent.master # SettingsFrame
+        self.settings = parent
         
         ctk.CTkLabel(self, text="LGU Details", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
@@ -307,7 +310,7 @@ class LGUConfigPanel(ctk.CTkFrame):
 class DatabaseSettingsPanel(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
-        self.settings = parent.master
+        self.settings = parent
         
         ctk.CTkLabel(self, text="Database & Backup", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
@@ -317,8 +320,11 @@ class DatabaseSettingsPanel(ctk.CTkFrame):
         ctk.CTkButton(self, text="📜 Export SQL Dump (.sql)", fg_color="#2c3e50", height=45, corner_radius=8,
                       command=self.export_sql).pack(fill="x", padx=40, pady=10)
 
+        ctk.CTkButton(self, text="📥 Import Database (.sqlite/.sql)", fg_color="#1a2a4a", height=45, corner_radius=8,
+                      command=self.import_db).pack(fill="x", padx=40, pady=10)
+
     def backup_db(self):
-        src = os.path.join(os.getcwd(), "vawc_db.sqlite")
+        src = DB_FILE
         dst = filedialog.asksaveasfilename(defaultextension=".sqlite", initialfile=f"vawc_backup_{datetime.now().strftime('%Y%m%d')}.sqlite")
         if dst:
             try:
@@ -332,14 +338,37 @@ class DatabaseSettingsPanel(ctk.CTkFrame):
         if dst:
             try:
                 import sqlite3
-                conn = sqlite3.connect("vawc_db.sqlite")
-                with open(dst, 'w') as f:
+                conn = sqlite3.connect(DB_FILE)
+                with open(dst, 'w', encoding='utf-8') as f:
                     for line in conn.iterdump():
                         f.write('%s\n' % line)
                 conn.close()
                 self.settings.show_banner(f"SQL Dump saved to:\n{os.path.basename(dst)}", parent=self)
             except Exception as e:
                 self.settings.show_banner(str(e), type="error", parent=self)
+
+    def import_db(self):
+        source = filedialog.askopenfilename(
+            filetypes=[("SQLite files", "*.sqlite"), ("SQL files", "*.sql")],
+            title="Select database file to import"
+        )
+        if not source:
+            return
+
+        try:
+            validate_import_file(source)
+        except Exception as e:
+            self.settings.show_banner(str(e), type="error", parent=self)
+            return
+
+        if not messagebox.askyesno("Confirm Import", f"Import database from {os.path.basename(source)}?\nA backup of the current database will be created before importing."):
+            return
+
+        try:
+            restore_database(source)
+            self.settings.show_banner(f"Imported successfully from {os.path.basename(source)}.", parent=self)
+        except Exception as e:
+            self.settings.show_banner(str(e), type="error", parent=self)
 
 class DeletedRecordsPanel(ctk.CTkFrame):
     def __init__(self, parent):
@@ -372,14 +401,16 @@ class DeletedRecordsPanel(ctk.CTkFrame):
         style.configure("Trash.Treeview", rowheight=35, background=tree_bg, foreground=tree_fg, fieldbackground=tree_bg)
         style.map("Trash.Treeview", background=[("selected", "#1a2a4a")], foreground=[("selected", "#ffffff")])
         
-        self.tree = ttk.Treeview(self.table_frame, columns=("VAWC No", "Client Name", "Date Deleted"), show="headings", style="Trash.Treeview")
+        self.tree = ttk.Treeview(self.table_frame, columns=("VAWC No", "Client Name", "Date Deleted", "Remaining Days"), show="headings", style="Trash.Treeview", selectmode="extended")
         self.tree.heading("VAWC No", text="VAWC NO")
         self.tree.heading("Client Name", text="CLIENT NAME")
         self.tree.heading("Date Deleted", text="DATE DELETED")
+        self.tree.heading("Remaining Days", text="REMAINING DAYS")
         
         self.tree.column("VAWC No", width=150, anchor="center")
         self.tree.column("Client Name", width=250, anchor="w")
         self.tree.column("Date Deleted", width=150, anchor="center")
+        self.tree.column("Remaining Days", width=150, anchor="center")
         
         self.tree.pack(side="left", fill="both", expand=True)
         
@@ -389,58 +420,141 @@ class DeletedRecordsPanel(ctk.CTkFrame):
                     
         self.load_trash()
         
-        ctk.CTkButton(self, text="♻️ Restore Selected Record", fg_color="#16a34a", hover_color="#15803d", height=45, corner_radius=8, font=("Arial", 13, "bold"),
-                      command=self.confirm_restore).pack(pady=20, padx=40, fill="x")
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=20, padx=40, fill="x")
+
+        ctk.CTkButton(btn_frame, text="♻️ Restore Selected Record(s)", fg_color="#16a34a", hover_color="#15803d", height=45, corner_radius=8, font=("Arial", 13, "bold"),
+                      command=self.confirm_restore).pack(side="left", expand=True, fill="x", padx=(0, 10))
+        ctk.CTkButton(btn_frame, text="🗑️ Delete Permanently", fg_color="#dc2626", hover_color="#b91c1c", height=45, corner_radius=8, font=("Arial", 13, "bold"),
+                      command=self.confirm_delete_permanent).pack(side="right", expand=True, fill="x", padx=(10, 0))
 
     def clear_search(self):
         self.search_entry.delete(0, "end")
         self.load_trash()
 
+    def clean_expired_trash(self):
+        from db import get_connection
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            cursor.execute("""
+                DELETE FROM vawc_logs
+                WHERE is_deleted = 1
+                AND (
+                    (deleted_at IS NOT NULL AND julianday('now') - julianday(deleted_at) > 15)
+                    OR (deleted_at IS NULL AND julianday('now') - julianday(updated_at) > 15)
+                )
+            """)
+            connection.commit()
+        except Exception:
+            pass
+        finally:
+            if connection:
+                connection.close()
+
+    def calculate_remaining_days(self, deleted_at):
+        if not deleted_at:
+            return "Unknown"
+        try:
+            deleted_dt = datetime.fromisoformat(deleted_at)
+        except ValueError:
+            try:
+                deleted_dt = datetime.strptime(deleted_at, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return "Unknown"
+        remaining = 15 - (datetime.now() - deleted_dt).days
+        return f"{remaining} days" if remaining >= 0 else "Expired"
+
     def load_trash(self):
         from db import get_connection
+        self.clean_expired_trash()
         search_term = self.search_entry.get().strip()
         for item in self.tree.get_children(): self.tree.delete(item)
         connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            query = "SELECT vawc_no, client_name, updated_at FROM vawc_logs WHERE is_deleted = 1"
+            query = "SELECT vawc_no, client_name, deleted_at FROM vawc_logs WHERE is_deleted = 1"
             params = []
             if search_term:
                 query += " AND (vawc_no LIKE ? OR client_name LIKE ?)"
                 params = [f"%{search_term}%", f"%{search_term}%"]
             
-            query += " ORDER BY updated_at DESC"
+            query += " ORDER BY deleted_at DESC"
             cursor.execute(query, params)
-            for row in cursor.fetchall():
-                self.tree.insert("", "end", values=row)
+            for vawc_no, client_name, deleted_at in cursor.fetchall():
+                remaining_days = self.calculate_remaining_days(deleted_at)
+                deleted_label = deleted_at if deleted_at else "Unknown"
+                self.tree.insert("", "end", values=(vawc_no, client_name, deleted_label, remaining_days))
         finally:
             if connection: connection.close()
 
     def confirm_restore(self):
-        item = self.tree.selection()
-        if not item:
-            messagebox.showwarning("Warning", "Please select a record to restore.")
+        items = self.tree.selection()
+        if not items:
+            messagebox.showwarning("Warning", "Please select record(s) to restore.")
             return
-        vawc_no = self.tree.item(item[0], "values")[0]
-        self.settings.show_confirmation_banner(f"Are you sure you want to restore record {vawc_no}?", 
-                                               lambda: self.restore(vawc_no), parent=self)
+        vawc_nos = [self.tree.item(item, "values")[0] for item in items]
+        label = "records" if len(vawc_nos) > 1 else "record"
+        self.settings.show_confirmation_banner(
+            f"Are you sure you want to restore {len(vawc_nos)} {label}?",
+            lambda: self.restore(vawc_nos), parent=self)
 
-    def restore(self, vawc_no):
+    def restore(self, vawc_nos):
         from db import get_connection, log_action
         connection = None
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("UPDATE vawc_logs SET is_deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE vawc_no = ?", (vawc_no,))
+            placeholders = ','.join('?' for _ in vawc_nos)
+            cursor.execute(
+                f"UPDATE vawc_logs SET is_deleted = 0, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE vawc_no IN ({placeholders})",
+                tuple(vawc_nos)
+            )
             connection.commit()
             
-            # Log the restoration
             username = self.settings.main_window.username
-            log_action(username, "Restore Record", target_record=vawc_no, details="Restored from Trash")
+            for vawc_no in vawc_nos:
+                log_action(username, "Restore Record", target_record=vawc_no, details="Restored from Trash")
             
             self.load_trash()
-            self.settings.show_banner(f"Record {vawc_no} restored successfully.", parent=self)
+            self.settings.show_banner(f"{len(vawc_nos)} record(s) restored successfully.", parent=self)
+        except Exception as e:
+            self.settings.show_banner(str(e), type="error", parent=self)
+        finally:
+            if connection: connection.close()
+
+    def confirm_delete_permanent(self):
+        items = self.tree.selection()
+        if not items:
+            messagebox.showwarning("Warning", "Please select record(s) to delete permanently.")
+            return
+        vawc_nos = [self.tree.item(item, "values")[0] for item in items]
+        label = "records" if len(vawc_nos) > 1 else "record"
+        self.settings.show_confirmation_banner(
+            f"Are you sure you want to permanently delete {len(vawc_nos)} {label}?",
+            lambda: self.delete_permanent(vawc_nos), parent=self)
+
+    def delete_permanent(self, vawc_nos):
+        from db import get_connection, log_action
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            placeholders = ','.join('?' for _ in vawc_nos)
+            cursor.execute(
+                f"DELETE FROM vawc_logs WHERE vawc_no IN ({placeholders})",
+                tuple(vawc_nos)
+            )
+            connection.commit()
+            
+            username = self.settings.main_window.username
+            for vawc_no in vawc_nos:
+                log_action(username, "Permanent Delete", target_record=vawc_no, details="Deleted permanently from Trash")
+            
+            self.load_trash()
+            self.settings.show_banner(f"{len(vawc_nos)} record(s) deleted permanently.", parent=self)
         except Exception as e:
             self.settings.show_banner(str(e), type="error", parent=self)
         finally:
@@ -804,7 +918,7 @@ class AppearancePanel(ctk.CTkFrame):
     def __init__(self, parent, main_window):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.main_window = main_window
-        self.settings = parent.master
+        self.settings = parent
         
         ctk.CTkLabel(self, text="Appearance Settings", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
@@ -816,6 +930,15 @@ class AppearancePanel(ctk.CTkFrame):
         self.appearance_var = ctk.StringVar(value=self.main_window.config.get("appearance_mode", "light").capitalize())
         self.mode_switch = ctk.CTkOptionMenu(container, values=["Light", "Dark", "System"], variable=self.appearance_var, command=self.change_appearance)
         self.mode_switch.pack(side="right", padx=20)
+
+        font_container = ctk.CTkFrame(self, fg_color=["#f8fafc", "#1a1a1a"], corner_radius=10)
+        font_container.pack(fill="x", padx=40, pady=(0, 20))
+        ctk.CTkLabel(font_container, text="Text Size", font=("Arial", 14, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(side="left", padx=20, pady=20)
+        self.font_scale_var = ctk.DoubleVar(value=self.main_window.font_scale)
+        self.font_scale_slider = ctk.CTkSlider(font_container, from_=0.85, to=1.5, number_of_steps=13, variable=self.font_scale_var, command=self.change_font_scale, width=250)
+        self.font_scale_slider.pack(side="right", padx=20, pady=20)
+        self.font_scale_label = ctk.CTkLabel(font_container, text=f"{int(self.main_window.font_scale * 100)}%", font=("Arial", 12), text_color=["#0f172a", "#f8fafc"])
+        self.font_scale_label.pack(side="right", padx=(0, 10), pady=20)
 
     def change_appearance(self, new_mode):
         mode = new_mode.lower()
@@ -835,4 +958,16 @@ class AppearancePanel(ctk.CTkFrame):
             settings_frame.show_banner(f"Theme changed to {new_mode}.", parent=self)
         
         # Refresh all frames to apply theme changes immediately
+        self.main_window.refresh_all_frames()
+
+    def change_font_scale(self, value):
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return
+        self.main_window.font_scale = min(max(value, 0.85), 1.5)
+        self.font_scale_label.configure(text=f"{int(self.main_window.font_scale * 100)}%")
+        self.main_window.config["font_scale"] = round(self.main_window.font_scale, 2)
+        save_config(self.main_window.config)
+        self.main_window.update_fonts()
         self.main_window.refresh_all_frames()

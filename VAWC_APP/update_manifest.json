@@ -1,7 +1,7 @@
 {
-    "version": "1.0.3",
-    "release_date": "2026-05-20",
-    "description": "Admin abuse type controls are now always visible, delete operations are faster via batched database updates, and release metadata is synchronized.",
+    "version": "1.0.4",
+    "release_date": "2026-05-25",
+    "description": "Improves UI accessibility and theming, fixes VAWC number handling, adds safer import/restore and trash management, and upgrades PDF export formatting.",
     "files": [
         "VAWC_APP/version.txt",
         "VAWC_APP/config.json",
