@@ -1,9 +1,9 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
+import os
 from datetime import datetime
 from db import get_connection
 from utils.helpers import get_scaled_font, parse_date_string
-from .view_record import ViewRecordWindow
 
 
 class PeopleScreen(ctk.CTkFrame):
@@ -108,27 +108,19 @@ class PeopleScreen(ctk.CTkFrame):
 
         # Layout
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_container.pack(fill="both", expand=True, padx=20, pady=20)
-
-        # Header
-        header = ctk.CTkLabel(self.main_container, text="People Directory", font=get_scaled_font(18, "bold"), text_color=self.colors["table_header"]) 
-        header.pack(anchor="w", pady=(0, 10))
-
-        sub = ctk.CTkLabel(self.main_container, text="Overview of all individuals recorded in the system", font=get_scaled_font(12, "normal"), text_color="#64748b")
-        sub.pack(anchor="w", pady=(0, 10))
+        self.main_container.pack(fill="both", expand=True, padx=20, pady=10)
 
         # Summary cards
         self.cards_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        self.cards_frame.pack(fill="x", pady=(10, 12))
+        self.cards_frame.pack(fill="x", pady=(0, 10))
 
         # create cards
         self.card_victims = self._make_card(self.cards_frame, "👩", "Victims", "Individuals who filed a case", self.colors["victims"], lambda: self.load_people("victims"))
         self.card_respondents = self._make_card(self.cards_frame, "👤", "Respondents", "Individuals reported in a case", self.colors["respondents"], lambda: self.load_people("respondents"))
-        self.card_highrisk = self._make_card(self.cards_frame, "⚠️", "High Risk", "Respondents with 3 or more cases", self.colors["highrisk"], lambda: self.load_people("highrisk"), urgent=True)
 
         # Search & info area
         self.search_container = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        self.search_container.pack(fill="x", pady=(10, 6))
+        self.search_container.pack(fill="x", pady=(0, 6))
         self.search_entry = ctk.CTkEntry(self.search_container, placeholder_text="Search by full name...", height=36, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"]) 
         self.search_entry.pack(side="left", fill="x", expand=True)
         self.search_entry.bind("<KeyRelease>", lambda e: self.load_people(self.mode))
@@ -181,16 +173,12 @@ class PeopleScreen(ctk.CTkFrame):
             cur.execute("SELECT COUNT(DISTINCT LOWER(TRIM(name_of_respondent))) FROM vawc_logs WHERE is_deleted = 0 AND name_of_respondent IS NOT NULL AND name_of_respondent != ''")
             respondents_count = cur.fetchone()[0] or 0
 
-            cur.execute("SELECT COUNT(*) FROM (SELECT LOWER(TRIM(name_of_respondent)) AS nm, COUNT(*) AS c FROM vawc_logs WHERE is_deleted = 0 AND name_of_respondent IS NOT NULL AND name_of_respondent != '' GROUP BY LOWER(TRIM(name_of_respondent)) HAVING c >= 3)")
-            highrisk_count = cur.fetchone()[0] or 0
-
             conn.close()
         except Exception:
-            victims_count = respondents_count = highrisk_count = 0
+            victims_count = respondents_count = 0
 
         self.card_victims.count_label.configure(text=str(victims_count))
         self.card_respondents.count_label.configure(text=str(respondents_count))
-        self.card_highrisk.count_label.configure(text=str(highrisk_count))
 
         if not self.mode:
             self.load_people("victims")
@@ -198,17 +186,15 @@ class PeopleScreen(ctk.CTkFrame):
             self.load_people(self.mode)
 
     def load_people(self, mode):
-        if mode not in ("victims", "respondents", "highrisk"):
+        if mode not in ("victims", "respondents"):
             return
         self.mode = mode
         # highlight active card
         try:
             if mode == "victims":
                 self._set_active_card(self.card_victims)
-            elif mode == "respondents":
-                self._set_active_card(self.card_respondents)
             else:
-                self._set_active_card(self.card_highrisk)
+                self._set_active_card(self.card_respondents)
         except Exception:
             pass
         term = self.search_entry.get().strip()
@@ -243,22 +229,6 @@ WHERE is_deleted = 0
     AND LOWER(name_of_respondent) LIKE LOWER(?)
 GROUP BY LOWER(TRIM(name_of_respondent))
 ORDER BY case_count DESC, name_of_respondent ASC
-"""
-        else: # highrisk
-            query = """
-SELECT 
-    name_of_respondent AS full_name,
-    COUNT(*) AS case_count,
-    MAX(date) AS last_case_date,
-    MAX(vawc_no) AS latest_case_no
-FROM vawc_logs
-WHERE is_deleted = 0
-    AND name_of_respondent IS NOT NULL
-    AND name_of_respondent != ''
-    AND LOWER(name_of_respondent) LIKE LOWER(?)
-GROUP BY LOWER(TRIM(name_of_respondent))
-HAVING case_count >= 3
-ORDER BY case_count DESC
 """
 
         try:
@@ -332,13 +302,16 @@ ORDER BY case_count DESC
         except Exception:
             total_cases = 0
 
-        badge_text = "Victim" if mode == "victims" else ("⚠️ High Risk Respondent" if mode == "highrisk" else "Respondent")
-        badge_color = self.colors["victims"] if mode == "victims" else (self.colors["highrisk"] if mode == "highrisk" else self.colors["respondents"])
+        badge_text = "Victim" if mode == "victims" else "Respondent"
+        badge_color = self.colors["victims"] if mode == "victims" else self.colors["respondents"]
         badge = ctk.CTkFrame(self.main_container, fg_color=badge_color, corner_radius=8)
         badge.pack(anchor="w", pady=(6, 4))
         ctk.CTkLabel(badge, text=badge_text, font=get_scaled_font(10, "bold"), text_color="white", padx=8, pady=3).pack()
 
         ctk.CTkLabel(self.main_container, text=f"{total_cases} case(s) on record", font=get_scaled_font(12, "normal"), text_color="#64748b").pack(anchor="w", pady=(6, 12))
+
+        self.current_person_name = name
+        self.current_person_mode = mode
 
         # Case history table
         table_card = ctk.CTkFrame(self.main_container, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
@@ -428,7 +401,124 @@ ORDER BY date DESC
         if not sel:
             return
         vawc_no = tree.item(sel[0], "values")[0]
+        self.show_case_detail_inline(vawc_no)
+
+    def show_case_detail_inline(self, vawc_no):
+        person_name = getattr(self, 'current_person_name', None)
+        mode = getattr(self, 'current_person_mode', 'victims')
+
         try:
-            ViewRecordWindow(self.master, vawc_no, user_role=self.user_role)
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+            record = cur.fetchone()
+            conn.close()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+            return
+
+        if not record:
+            messagebox.showerror("Error", f"Record {vawc_no} not found.")
+            return
+
+        # Replace main content with inline record view
+        for w in self.main_container.winfo_children():
+            w.destroy()
+
+        header_row = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        header_row.pack(fill="x", pady=(0, 8))
+
+        back_btn = ctk.CTkButton(header_row, text=f"← Back to {person_name or 'Cases'}", command=lambda: self.show_person_detail(person_name, mode), fg_color="transparent", text_color="#1a2a4a", hover_color="#eeeeee", width=180, height=38)
+        back_btn.pack(side="left")
+
+        hdr = ctk.CTkLabel(header_row, text=f"Case Detail: {vawc_no}", font=get_scaled_font(18, "bold"), text_color=self.colors["table_header"])
+        hdr.pack(side="left", padx=(14, 0), pady=2)
+
+        detail_card = ctk.CTkFrame(self.main_container, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        detail_card.pack(fill="both", expand=True, padx=10, pady=10)
+
+        scroll = ctk.CTkScrollableFrame(detail_card, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=14, pady=14)
+
+        date_value = ""
+        if record[2]:
+            parsed = parse_date_string(record[2])
+            date_value = parsed.strftime("%m/%d/%Y") if parsed else record[2]
+
+        birthdate_value = ""
+        if record[6]:
+            parsed = parse_date_string(record[6])
+            birthdate_value = parsed.strftime("%m/%d/%Y") if parsed else record[6]
+
+        attachments_value = record[11] or ""
+        fields = [
+            ("VAWC Number", record[1] or ""),
+            ("Date of Report", date_value),
+            ("Client Name", record[3] or ""),
+            ("Age", str(record[4]) if record[4] else ""),
+            ("Contact Information", record[5] or ""),
+            ("Birthdate", birthdate_value),
+            ("Complete Address", record[7] or ""),
+            ("Type of Abuse", record[8] or ""),
+            ("Name of Respondent", record[9] or ""),
+            ("Case Status", record[10] or ""),
+            ("Referred To", record[13] or ""),
+            ("Attachments", attachments_value),
+            ("Case Remarks / Notes", record[12] or "")
+        ]
+
+        for label, value in fields:
+            row = ctk.CTkFrame(scroll, fg_color=["#f9fafb", "#1f2937"], corner_radius=10)
+            row.pack(fill="x", pady=6)
+            ctk.CTkLabel(row, text=label, font=("Arial", 12, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", padx=12, pady=(10, 4))
+            if label == "Type of Abuse":
+                abuses = [x.strip() for x in (value or "").split(",") if x.strip()]
+                abuse_frame = ctk.CTkFrame(row, fg_color="transparent")
+                abuse_frame.pack(fill="x", padx=12, pady=(0, 12))
+                for abuse in abuses:
+                    pill = ctk.CTkFrame(abuse_frame, fg_color=["#e2e8f0", "#334155"], corner_radius=14)
+                    pill.pack(side="left", padx=6, pady=2)
+                    ctk.CTkLabel(pill, text=abuse, font=("Arial", 11), text_color=["#0f172a", "#f8fafc"]).pack(side="left", padx=(10, 10))
+                if not abuses:
+                    ctk.CTkLabel(row, text="No abuse type recorded", font=("Arial", 12), text_color=["#475569", "#94a3b8"]).pack(anchor="w", padx=12, pady=(0, 12))
+            elif label == "Attachments":
+                attachment_paths = [x.strip() for x in (value or "").split(";") if x.strip()]
+                if attachment_paths:
+                    attachment_frame = ctk.CTkFrame(row, fg_color="transparent")
+                    attachment_frame.pack(fill="x", padx=12, pady=(0, 12))
+                    for path in attachment_paths:
+                        file_name = os.path.basename(path)
+                        ctk.CTkButton(
+                            attachment_frame,
+                            text=file_name,
+                            fg_color=["#f8fafc", "#334155"],
+                            hover_color=["#e2e8f0", "#475569"],
+                            text_color=["#1a2a4a", "#f8fafc"],
+                            anchor="w",
+                            corner_radius=8,
+                            height=34,
+                            command=lambda p=path: self.open_attachment(p)
+                        ).pack(fill="x", pady=4)
+                else:
+                    ctk.CTkLabel(row, text="No attachments", font=("Arial", 12), text_color=["#475569", "#94a3b8"]).pack(anchor="w", padx=12, pady=(0, 12))
+            else:
+                ctk.CTkLabel(row, text=value, font=("Arial", 12), text_color=["#475569", "#94a3b8"], wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(0, 12))
+
+    def open_attachment(self, path):
+        if not path:
+            messagebox.showwarning("Attachment", "Attachment path is missing.")
+            return
+        if not os.path.exists(path):
+            messagebox.showerror("Attachment", f"File not found:\n{path}")
+            return
+        try:
+            if os.name == 'nt':
+                os.startfile(path)
+            elif os.name == 'posix':
+                import subprocess
+                subprocess.Popen(["xdg-open", path])
+            else:
+                messagebox.showerror("Attachment", "Unsupported platform for opening attachments.")
+        except Exception as e:
+            messagebox.showerror("Attachment", f"Failed to open attachment:\n{str(e)}")
+

@@ -25,7 +25,7 @@ class DashboardFrame(ctk.CTkFrame):
 
         # 1. PRIMARY STATS (4 cards)
         stats_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=20, pady=(20, 10))
+        stats_frame.pack(fill="x", padx=20, pady=(10, 10))
         stats_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         total_cases = sum(self.status_counts.values())
@@ -44,7 +44,7 @@ class DashboardFrame(ctk.CTkFrame):
 
         # 2. ADVANCED ANALYTICS (3 cards)
         analytics_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
-        analytics_frame.pack(fill="x", padx=20, pady=10)
+        analytics_frame.pack(fill="x", padx=20, pady=5)
         analytics_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
         # Abuse Card
@@ -73,7 +73,7 @@ class DashboardFrame(ctk.CTkFrame):
 
         # 3. CHARTS (2 main charts)
         charts_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
-        charts_frame.pack(fill="x", padx=20, pady=10)
+        charts_frame.pack(fill="x", padx=20, pady=5)
         charts_frame.grid_columnconfigure((0, 1), weight=1)
 
         # Monthly Trend
@@ -276,10 +276,10 @@ class DashboardFrame(ctk.CTkFrame):
             ctk.CTkLabel(pill, text=status, font=("Arial", 12), text_color="#0f172a").pack(side="left")
             ctk.CTkLabel(pill, text=str(count), font=("Arial", 12, "bold"), text_color="#0f172a").pack(side="right", padx=15)
 
-        # Top 3 Abuse Types & Hotspots & High Risk Respondents (Advanced Analytics)
+        # Top 3 Abuse Types & Hotspots (Advanced Analytics)
         analytics_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
         analytics_frame.pack(fill="x", padx=20, pady=(10, 5))
-        analytics_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        analytics_frame.grid_columnconfigure((0, 1), weight=1)
 
         # Abuse Card
         abuse_card = ctk.CTkFrame(analytics_frame, fg_color="white", corner_radius=10)
@@ -309,21 +309,6 @@ class DashboardFrame(ctk.CTkFrame):
                 ctk.CTkLabel(row, text=str(count), font=("Arial", 11, "bold"), text_color="#1a73e8").pack(side="right")
         else:
             ctk.CTkLabel(hotspot_card, text="No address data available", font=("Arial", 10, "italic")).pack(pady=10)
-
-        # High Risk Respondents Card
-        risk_card = ctk.CTkFrame(analytics_frame, fg_color="white", corner_radius=10)
-        risk_card.grid(row=0, column=2, padx=(10, 0), sticky="nsew")
-        ctk.CTkLabel(risk_card, text="🚩 High Risk Respondents", font=("Arial", 14, "bold"), text_color="#8b0000").pack(pady=(15, 10))
-
-        if self.high_risk_respondents:
-            for i, (name, count) in enumerate(self.high_risk_respondents[:3]):
-                row = ctk.CTkFrame(risk_card, fg_color="transparent")
-                row.pack(fill="x", padx=20, pady=2)
-                short_name = (name[:20] + '...') if len(name) > 20 else name
-                ctk.CTkLabel(row, text=f"⚠️ {short_name}", font=("Arial", 11), text_color="#333333").pack(side="left")
-                ctk.CTkLabel(row, text=f"{count} cases", font=("Arial", 11, "bold"), text_color="#dc3545").pack(side="right")
-        else:
-            ctk.CTkLabel(risk_card, text="No high risk respondents found", font=("Arial", 10, "italic"), text_color="#64748b").pack(pady=10)
 
         # Charts Section
         charts_frame = ctk.CTkFrame(self.scroll_container, fg_color="#f5f5f5")

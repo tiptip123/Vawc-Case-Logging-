@@ -13,7 +13,7 @@ def generate_vawc_number(report_date=None):
         connection.isolation_level = None
         cursor = connection.cursor()
 
-        cursor.execute("BEGIN EXCLUSIVE")
+        cursor.execute("BEGIN IMMEDIATE")
 
         cursor.execute("SELECT MAX(vawc_no) FROM vawc_logs WHERE vawc_no LIKE ? AND is_deleted = 0", (prefix + '%',))
         result = cursor.fetchone()

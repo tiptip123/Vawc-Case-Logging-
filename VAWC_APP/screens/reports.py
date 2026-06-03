@@ -18,16 +18,14 @@ class ReportsFrame(ctk.CTkFrame):
 
         # Main container
         self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll_container.pack(fill="both", expand=True, padx=20, pady=20)
+        self.scroll_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
         # Filter Section for Export
         filter_card = ctk.CTkFrame(self.scroll_container, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
         filter_card.pack(fill="x", padx=10, pady=(0, 20))
         
-        ctk.CTkLabel(filter_card, text="🔍 Export Filters", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", padx=20, pady=(15, 5))
-        ctk.CTkLabel(filter_card, text="Apply filters below before clicking 'Export Filtered' or 'Export to Excel'.", font=("Arial", 12), text_color=["#64748b", "#94a3b8"]).pack(anchor="w", padx=20, pady=(0, 15))
         self.status_label = ctk.CTkLabel(filter_card, text="", font=("Arial", 11), text_color=["#16a34a", "#86efac"])
-        self.status_label.pack(anchor="w", padx=20, pady=(0, 10))
+        self.status_label.pack(anchor="w", padx=20, pady=(10, 10))
         
         filter_grid = ctk.CTkFrame(filter_card, fg_color="transparent")
         filter_grid.pack(fill="x", padx=20, pady=(0, 20))
@@ -162,6 +160,7 @@ class ReportsFrame(ctk.CTkFrame):
         self.set_export_status("Exporting filtered PDF report...")
         self.set_export_button_enabled(self.filtered_export_card, False)
         try:
+            self.abuse_combo.configure(values=["Type of Abuse"] + get_abuse_types())
             filter_status = self.status_var.get()
             filter_abuse = self.abuse_var.get()
             filter_year = self.year_var.get()
@@ -190,6 +189,7 @@ class ReportsFrame(ctk.CTkFrame):
         self.set_export_status("Exporting spreadsheet...")
         self.set_export_button_enabled(self.excel_export_card, False)
         try:
+            self.abuse_combo.configure(values=["Type of Abuse"] + get_abuse_types())
             filter_status = self.status_var.get()
             filter_abuse = self.abuse_var.get()
             filter_year = self.year_var.get()

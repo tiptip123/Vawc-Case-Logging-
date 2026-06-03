@@ -9,8 +9,10 @@ DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vawc_db.sqli
 
 def get_connection(retry_count=0, max_retries=2):
     try:
-        conn = sqlite3.connect(DB_FILE, timeout=5.0)
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA journal_mode = WAL")
         return conn
     except sqlite3.OperationalError as e:
         if ("locked" in str(e) or "unable to open" in str(e)) and retry_count < max_retries:
@@ -254,6 +256,25 @@ def add_abuse_type(name):
         cursor.execute("SELECT 1 FROM abuse_types WHERE LOWER(name)=LOWER(?)", (name,))
         if cursor.fetchone():
             raise ValueError("Abuse type already exists")
+        cursor.execute("INSERT INTO abuse_types (name) VALUES (?)", (name,))
+        connection.commit()
+        return True
+    finally:
+        if connection:
+            connection.close()
+
+
+def ensure_abuse_type(name):
+    if not name or not name.strip():
+        return False
+    name = name.strip()
+    connection = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1 FROM abuse_types WHERE LOWER(name)=LOWER(?)", (name,))
+        if cursor.fetchone():
+            return False
         cursor.execute("INSERT INTO abuse_types (name) VALUES (?)", (name,))
         connection.commit()
         return True

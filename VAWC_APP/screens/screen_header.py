@@ -8,7 +8,7 @@ class ScreenHeader(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         header_container = ctk.CTkFrame(self, fg_color="transparent")
-        header_container.grid(row=0, column=0, sticky="w", padx=20, pady=(20, 10))
+        header_container.grid(row=0, column=0, sticky="w", padx=20, pady=(10, 6))
 
         # Add Logo
         logo_path = os.path.join(os.getcwd(), "logo", "tankulan.jpg")
@@ -24,7 +24,7 @@ class ScreenHeader(ctk.CTkFrame):
             except Exception:
                 pass
 
-        ctk.CTkLabel(header_container, text=title, font=("Arial", 22, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(side="left")
+        ctk.CTkLabel(header_container, text=title, font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(side="left")
 
         if actions:
             action_frame = ctk.CTkFrame(self, fg_color="transparent")

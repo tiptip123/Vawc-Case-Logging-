@@ -34,11 +34,11 @@ class SettingsFrame(ctk.CTkFrame):
 
         # Scrollable area
         self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll_container.pack(fill="both", expand=True, padx=20, pady=10)
+        self.scroll_container.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
         # Responsive Grid Layout
         self.grid_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
-        self.grid_frame.pack(fill="x", padx=20, pady=20)
+        self.grid_frame.pack(fill="x", padx=20, pady=(10, 20))
         self.grid_frame.grid_columnconfigure((0, 1), weight=1)
 
         self.setup_cards()
@@ -70,7 +70,12 @@ class SettingsFrame(ctk.CTkFrame):
         icon = "✅" if type == "success" else "❌"
         
         banner = ctk.CTkFrame(parent or self, fg_color=bg_color, corner_radius=8, height=45)
-        banner.pack(fill="x", padx=40, pady=10, before=parent.winfo_children()[1] if parent and len(parent.winfo_children()) > 1 else None)
+        pack_before = None
+        if parent:
+            children = parent.winfo_children()
+            if len(children) > 1 and children[1].winfo_manager() == "pack":
+                pack_before = children[1]
+        banner.pack(fill="x", padx=40, pady=10, before=pack_before)
         banner.pack_propagate(False)
         
         ctk.CTkLabel(banner, text=f"{icon}  {message}", font=("Arial", 12, "bold"), text_color=text_color).pack(side="left", padx=15)
@@ -84,32 +89,13 @@ class SettingsFrame(ctk.CTkFrame):
         return banner
 
     def show_confirmation_banner(self, message, confirm_cmd, type="warning", parent=None):
-        """Shows an inline confirmation banner with Yes/Cancel buttons"""
-        bg_color = ["#fef9c3", "#713f12"] if type == "warning" else ["#fee2e2", "#7f1d1d"]
-        text_color = ["#854d0e", "#fef9c3"] if type == "warning" else ["#991b1b", "#fef2f2"]
-        icon = "⚠️" if type == "warning" else "🚪"
-        
-        banner = ctk.CTkFrame(parent or self, fg_color=bg_color, corner_radius=8)
-        banner.pack(fill="x", padx=40, pady=10, before=parent.winfo_children()[1] if parent and len(parent.winfo_children()) > 1 else None)
-        
-        content = ctk.CTkFrame(banner, fg_color="transparent")
-        content.pack(fill="x", padx=20, pady=15)
-        
-        ctk.CTkLabel(content, text=f"{icon}  {message}", font=("Arial", 13, "bold"), text_color=text_color).pack(side="left")
-        
-        btn_frame = ctk.CTkFrame(content, fg_color="transparent")
-        btn_frame.pack(side="right")
-        
-        confirm_text = "Yes, Logout" if type == "logout" else "Yes, Proceed"
-        ctk.CTkButton(btn_frame, text=confirm_text, height=32, width=120, 
-                      fg_color="#8b0000" if type != "warning" else "#1a2a4a", 
-                      command=lambda: [banner.destroy(), confirm_cmd()]).pack(side="left", padx=5)
-                      
-        ctk.CTkButton(btn_frame, text="Cancel", height=32, width=80, 
-                      fg_color="transparent", text_color=text_color, border_width=1, border_color=text_color,
-                      command=banner.destroy).pack(side="left", padx=5)
-        
-        return banner
+        """Shows a centered yes/no confirmation dialog."""
+        window_parent = parent or self
+        title = "Logout Confirmation" if type == "logout" else "Confirmation"
+        result = messagebox.askyesno(title, message, parent=window_parent)
+        if result:
+            confirm_cmd()
+        return result
 
     def load_version(self):
         try:
@@ -267,15 +253,13 @@ class SettingsFrame(ctk.CTkFrame):
         self.show_confirmation_banner("Are you sure you want to logout?", 
                                       self.main_window.logout, 
                                       type="logout", 
-                                      parent=self.grid_frame.master.master) # Show at the top of scroll container
+                                      parent=self.scroll_container) # Show at the top of scroll container
 
 class LGUConfigPanel(ctk.CTkFrame):
     def __init__(self, parent, main_window):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.main_window = main_window
         self.settings = parent
-        
-        ctk.CTkLabel(self, text="LGU Details", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
         self.fields = {}
         form = ctk.CTkFrame(self, fg_color="transparent")
@@ -311,8 +295,6 @@ class DatabaseSettingsPanel(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.settings = parent
-        
-        ctk.CTkLabel(self, text="Database & Backup", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
         ctk.CTkButton(self, text="📂 Backup Database (.sqlite)", fg_color="#1a2a4a", height=45, corner_radius=8,
                       command=self.backup_db).pack(fill="x", padx=40, pady=10)
@@ -374,8 +356,6 @@ class DeletedRecordsPanel(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.settings = parent # parent is SettingsFrame
-        
-        ctk.CTkLabel(self, text="Soft-Deleted Records", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
         # Search Bar for Trash
         search_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -565,7 +545,6 @@ class AboutPanel(ctk.CTkScrollableFrame):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.main_window = main_window
 
-        ctk.CTkLabel(self, text="VAWC Case Logging System", font=("Arial", 20, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(0, 5))
         ctk.CTkLabel(self, text=f"Version {current_version}", font=("Arial", 12), text_color=["#666666", "#94a3b8"]).pack()
         
         lgu_text = f"Built for: {self.main_window.config['lgu_name']}\n{self.main_window.config['office_name']}\n{self.main_window.config['municipality']}, {self.main_window.config['province']}"
@@ -600,8 +579,6 @@ class OnlineUpdatePanel(ctk.CTkFrame):
         self.current_version = current_version
         self.settings = settings_frame
         self.repo = self.settings.main_window.config.get("github_repo", "yourusername/vawc_app_repo")
-        
-        ctk.CTkLabel(self, text="Online System Update", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
         self.info_frame = ctk.CTkFrame(self, fg_color=["#f8f9fa", "#1a1a1a"], corner_radius=10)
         self.info_frame.pack(fill="x", padx=40, pady=20)
@@ -779,8 +756,6 @@ class UpdatePanel(ctk.CTkFrame):
         self.current_version = current_version
         self.settings = settings_frame
         
-        ctk.CTkLabel(self, text="System Update", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
-        
         info_frame = ctk.CTkFrame(self, fg_color=["#f8f9fa", "#1a1a1a"], corner_radius=10)
         info_frame.pack(fill="x", padx=40, pady=20)
         
@@ -927,8 +902,6 @@ class AppearancePanel(ctk.CTkFrame):
         super().__init__(parent, fg_color=["white", "#242424"], corner_radius=15)
         self.main_window = main_window
         self.settings = parent
-        
-        ctk.CTkLabel(self, text="Appearance Settings", font=("Arial", 18, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(pady=(20, 10))
         
         container = ctk.CTkFrame(self, fg_color=["#f8fafc", "#1a1a1a"], corner_radius=10)
         container.pack(fill="x", padx=40, pady=20)

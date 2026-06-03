@@ -1,11 +1,11 @@
 import os
 import sqlite3
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, Toplevel, Listbox
 from tkcalendar import DateEntry
 from datetime import datetime
 from db import get_connection
-from db import get_abuse_types, add_abuse_type, update_abuse_type, delete_abuse_type
+from db import get_abuse_types, add_abuse_type, update_abuse_type, delete_abuse_type, ensure_abuse_type
 from utils.helpers import calculate_age
 
 class EditRecordWindow(ctk.CTkToplevel):
@@ -90,12 +90,24 @@ class EditRecordWindow(ctk.CTkToplevel):
         self.address_text.pack(padx=10, pady=(0, 10), fill="x")
 
         ctk.CTkLabel(form_frame, text="Type of Abuse", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
-        self.abuse_vars = {}
         self.abuse_order = get_abuse_types()
-        existing_abuses = set(self.record[8].split(", ")) if self.record[8] else set()
+        existing_abuses = [x.strip() for x in self.record[8].split(",") if x.strip()] if self.record[8] else []
+        self.selected_abuses = existing_abuses.copy()
         self.abuse_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
         self.abuse_frame.pack(fill="x", padx=10, pady=(0, 10))
-        self.render_abuse_grid(existing_abuses)
+
+        self.abuse_selected_frame = ctk.CTkFrame(self.abuse_frame, fg_color="transparent")
+        # Do not pack now; only show when selected abuses exist to avoid extra spacing
+
+        self.abuse_entry = ctk.CTkEntry(self.abuse_frame, placeholder_text="Search or enter abuse type and press Enter", height=42, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"])
+        self.abuse_entry.pack(fill="x")
+        self.abuse_entry.bind("<KeyRelease>", self.on_abuse_key_release)
+        self.abuse_entry.bind("<Return>", lambda e: self.add_abuse_from_entry())
+        self.abuse_entry.bind("<FocusOut>", lambda e: self.after(100, lambda: self.hide_suggestion_dropdown("abuse")))
+
+        self.abuse_suggestion_popup = None
+        self.abuse_suggestion_listbox = None
+        self.render_selected_abuses()
 
         ctk.CTkLabel(form_frame, text="Name of Respondent", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         self.respondent_entry = ctk.CTkEntry(form_frame, placeholder_text="Name of Respondent", border_width=2, corner_radius=8, text_color=["black", "white"])
@@ -147,38 +159,124 @@ class EditRecordWindow(ctk.CTkToplevel):
         self.btn_cancel = ctk.CTkButton(button_frame, text="Cancel", fg_color="#6c757d", hover_color="#5a6268", command=self.destroy)
         self.btn_cancel.pack(side="right", padx=(10, 0), pady=5, ipadx=10)
 
-    def render_abuse_grid(self, existing_abuses=None):
-        existing_abuses = existing_abuses or set()
-        self.abuse_order = get_abuse_types()
-        for widget in self.abuse_frame.winfo_children():
+    def render_selected_abuses(self):
+        # Clear existing children first
+        for widget in self.abuse_selected_frame.winfo_children():
             widget.destroy()
 
-        for i, abuse in enumerate(self.abuse_order):
-            selected = abuse in existing_abuses
-            var = self.abuse_vars.get(abuse) or ctk.BooleanVar(value=selected)
-            self.abuse_vars[abuse] = var
-            pill = ctk.CTkFrame(self.abuse_frame, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#dce4ee", "#333333"], corner_radius=20)
-            pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
-            self.abuse_frame.grid_columnconfigure(i%4, weight=1)
-            cb = ctk.CTkCheckBox(pill, text=abuse, variable=var, text_color=["black", "white"], checkbox_width=18, checkbox_height=18, command=lambda a=abuse, p=pill, v=var: self.update_pill_style(a, p, v))
-            cb.pack(padx=15, pady=8, side="left")
-            var._pill_widget = pill
+        # If no selected abuses, ensure the frame is not packed so it doesn't take space
+        if not self.selected_abuses:
+            try:
+                if self.abuse_selected_frame.winfo_ismapped():
+                    self.abuse_selected_frame.pack_forget()
+            except Exception:
+                pass
+            return
 
-            if self.user_role == 'Admin':
-                controls_frame = ctk.CTkFrame(pill, fg_color="transparent")
-                edit_btn = ctk.CTkButton(controls_frame, text="Edit", width=52, height=28, fg_color="transparent", hover_color="#e2e8f0", text_color="#475569", command=lambda a=abuse: self.open_edit_type_modal(a))
-                delete_btn = ctk.CTkButton(controls_frame, text="Delete", width=58, height=28, fg_color="transparent", hover_color="#fee2e2", text_color="#b91c1c", command=lambda a=abuse: self.confirm_delete_type(a))
-                edit_btn.pack(side="left", padx=(0, 4))
-                delete_btn.pack(side="left", padx=(0, 4))
-                controls_frame.pack(side="right", padx=(0, 10), pady=8)
+        # Ensure visible when tags exist
+        try:
+            if not self.abuse_selected_frame.winfo_ismapped():
+                self.abuse_selected_frame.pack(fill="x", pady=(0, 8))
+        except Exception:
+            self.abuse_selected_frame.pack(fill="x", pady=(0, 8))
 
-        if self.user_role == 'Admin':
-            i = len(self.abuse_order)
-            add_pill = ctk.CTkFrame(self.abuse_frame, fg_color=["white", "#2b2b2b"], border_width=1, border_color=["#dce4ee", "#333333"], corner_radius=20)
-            add_pill.grid(row=i//4, column=i%4, padx=5, pady=5, sticky="ew")
-            self.abuse_frame.grid_columnconfigure(i%4, weight=1)
-            add_btn = ctk.CTkButton(add_pill, text="+ Add New Type", fg_color="transparent", text_color=["#1a2a4a", "#f8fafc"], border_width=1, border_color=["#94a3b8", "#6b7280"], command=self.open_add_type_modal)
-            add_btn.pack(padx=15, pady=8, fill="x")
+        for abuse in self.selected_abuses:
+            pill = ctk.CTkFrame(self.abuse_selected_frame, fg_color=["#e2e8f0", "#334155"], corner_radius=14)
+            pill.pack(side="left", padx=4, pady=2)
+            ctk.CTkLabel(pill, text=abuse, font=("Arial", 11), text_color=["#0f172a", "#f8fafc"]).pack(side="left", padx=(10, 6))
+            ctk.CTkButton(pill, text="✕", width=24, height=24, fg_color="transparent", hover_color=["#fee2e2", "#4b0000"], text_color="#b91c1c",
+                          command=lambda a=abuse: self.remove_abuse_tag(a)).pack(side="left", padx=(0, 8))
+
+    def add_abuse_tag(self, abuse):
+        abuse = abuse.strip()
+        if not abuse:
+            return
+        if abuse.lower() in [existing.lower() for existing in self.selected_abuses]:
+            return
+        self.selected_abuses.append(abuse)
+        self.abuse_entry.delete(0, "end")
+        self.render_selected_abuses()
+        self.hide_suggestion_dropdown("abuse")
+
+    def remove_abuse_tag(self, abuse):
+        self.selected_abuses = [a for a in self.selected_abuses if a.lower() != abuse.lower()]
+        self.render_selected_abuses()
+
+    def add_abuse_from_entry(self):
+        value = self.abuse_entry.get().strip()
+        if value:
+            self.add_abuse_tag(value)
+
+    def query_abuse_suggestions(self, query):
+        if not query or len(query.strip()) < 1:
+            return []
+        ignore = {a.lower() for a in self.selected_abuses}
+        suggestions = [a for a in get_abuse_types() if query.lower() in a.lower() and a.lower() not in ignore]
+        return suggestions[:10]
+
+    def on_abuse_key_release(self, event=None):
+        value = self.abuse_entry.get().strip()
+        if not value:
+            self.hide_suggestion_dropdown("abuse")
+            return
+        suggestions = self.query_abuse_suggestions(value)
+        if suggestions:
+            self.show_suggestion_dropdown("abuse", self.abuse_entry, suggestions)
+        else:
+            self.hide_suggestion_dropdown("abuse")
+
+    def show_suggestion_dropdown(self, field, entry_widget, suggestions):
+        popup_attr = f"{field}_suggestion_popup"
+        listbox_attr = f"{field}_suggestion_listbox"
+
+        current_popup = getattr(self, popup_attr, None)
+        if current_popup and current_popup.winfo_exists():
+            current_popup.destroy()
+
+        popup = Toplevel(self)
+        popup.wm_overrideredirect(True)
+        popup.wm_attributes("-topmost", True)
+        popup.configure(background="#ffffff")
+
+        listbox = Listbox(popup, activestyle="none", highlightthickness=1, bd=1, relief="solid", selectbackground="#1d4ed8", selectforeground="#ffffff")
+        listbox.pack(fill="both", expand=True)
+
+        for suggestion in suggestions:
+            listbox.insert("end", suggestion)
+
+        listbox.bind("<<ListboxSelect>>", lambda e, f=field: self.on_suggestion_select(f))
+        listbox.bind("<ButtonRelease-1>", lambda e, f=field: self.on_suggestion_select(f))
+        listbox.bind("<Escape>", lambda e, f=field: self.hide_suggestion_dropdown(f))
+
+        x = entry_widget.winfo_rootx()
+        y = entry_widget.winfo_rooty() + entry_widget.winfo_height()
+        width = max(entry_widget.winfo_width(), 200)
+        height = min(len(suggestions), 10) * 24
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+
+        setattr(self, popup_attr, popup)
+        setattr(self, listbox_attr, listbox)
+
+    def hide_suggestion_dropdown(self, field):
+        popup_attr = f"{field}_suggestion_popup"
+        listbox_attr = f"{field}_suggestion_listbox"
+        popup = getattr(self, popup_attr, None)
+        if popup and popup.winfo_exists():
+            popup.destroy()
+        setattr(self, popup_attr, None)
+        setattr(self, listbox_attr, None)
+
+    def on_suggestion_select(self, field):
+        listbox = getattr(self, f"{field}_suggestion_listbox", None)
+        if not listbox:
+            return
+        selection = listbox.curselection()
+        if not selection:
+            return
+        value = listbox.get(selection[0])
+        if field == "abuse":
+            self.add_abuse_tag(value)
+        self.hide_suggestion_dropdown(field)
 
     def open_add_type_modal(self):
         modal = ctk.CTkToplevel(self)
@@ -211,7 +309,6 @@ class EditRecordWindow(ctk.CTkToplevel):
             try:
                 add_abuse_type(name)
                 self.abuse_order = get_abuse_types()
-                self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
                 modal.destroy()
             except ValueError as ve:
                 err_label.configure(text=str(ve))
@@ -248,11 +345,9 @@ class EditRecordWindow(ctk.CTkToplevel):
                 return
             try:
                 update_abuse_type(current_name, new_name)
-                var = self.abuse_vars.pop(current_name, None)
-                if var is not None:
-                    self.abuse_vars[new_name] = var
                 self.abuse_order = get_abuse_types()
-                self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+                self.selected_abuses = [new_name if a.lower() == current_name.lower() else a for a in self.selected_abuses]
+                self.render_selected_abuses()
                 messagebox.showinfo("Success", f"'{current_name}' updated to '{new_name}'")
                 modal.destroy()
             except ValueError as ve:
@@ -269,8 +364,8 @@ class EditRecordWindow(ctk.CTkToplevel):
         try:
             delete_abuse_type(abuse_name)
             self.abuse_order = [a for a in self.abuse_order if a.lower() != abuse_name.lower()]
-            self.abuse_vars.pop(abuse_name, None)
-            self.render_abuse_grid(set(self.record[8].split(", ")) if self.record[8] else set())
+            self.selected_abuses = [a for a in self.selected_abuses if a.lower() != abuse_name.lower()]
+            self.render_selected_abuses()
             messagebox.showinfo("Deleted", f"'{abuse_name}' has been deleted")
         except ValueError as ve:
             messagebox.showwarning("Cannot Delete", str(ve))
@@ -309,8 +404,16 @@ class EditRecordWindow(ctk.CTkToplevel):
         contact = self.contact_entry.get().strip()
         birthdate = self.birthdate_entry.get_date() if self.birthdate_entry.get() else None
         address = self.address_text.get("1.0", "end").strip()
-        abuses = [k for k, v in self.abuse_vars.items() if v.get()]
+        abuses = [a for a in self.selected_abuses if a.strip()]
+        current_abuse = self.abuse_entry.get().strip()
+        if current_abuse and current_abuse.lower() not in [a.lower() for a in abuses]:
+            abuses.append(current_abuse)
         type_of_abuse = ", ".join(abuses)
+        for abuse in abuses:
+            try:
+                ensure_abuse_type(abuse)
+            except Exception:
+                pass
         respondent = self.respondent_entry.get().strip()
         remarks = self.remarks_text.get("1.0", "end").strip()
         referred_to = self.referred_entry.get().strip()

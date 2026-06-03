@@ -1,7 +1,7 @@
 {
-    "version": "1.0.5",
+    "version": "1.0.6",
     "release_date": "2026-06-03",
-    "description": "UI polish, export status feedback, safer update compatibility for older installs, improved search/filter UX, and update path handling fixes.",
+    "description": "UI polish, header whitespace removal, safer update compatibility for older installs, improved search/filter UX, and update path handling fixes.",
     "files": [
         "VAWC_APP/version.txt",
         "VAWC_APP/config.json",
@@ -13,6 +13,8 @@
         "VAWC_APP/screens/dashboard.py",
         "VAWC_APP/screens/logs_tab.py",
         "VAWC_APP/screens/add_record.py",
+        "VAWC_APP/screens/people.py",
+        "VAWC_APP/screens/screen_header.py",
         "VAWC_APP/screens/edit_record.py",
         "VAWC_APP/screens/view_record.py",
         "VAWC_APP/screens/reports.py",
@@ -22,7 +24,7 @@
         "VAWC_APP/utils/excel_export.py",
         "VAWC_APP/utils/pdf_export.py",
         "VAWC_APP/update_manifest.json",
-        "VAWC_APP/RELEASE_NOTES_1.0.5.md",
+        "VAWC_APP/RELEASE_NOTES_1.0.6.md",
         "VAWC_APP/RELEASE_CHECKLIST.txt",
         "VAWC_APP/requirements.txt"
     ]

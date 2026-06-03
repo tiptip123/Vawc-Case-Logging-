@@ -47,7 +47,7 @@ class MainWindow(ctk.CTk):
         }
 
         # Layout Configuration
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
         # 1. SIDEBAR (200px, fixed)
@@ -81,59 +81,13 @@ class MainWindow(ctk.CTk):
         self.bottom_nav_frame.pack(side="bottom", fill="x", pady=(0, 12))
         self.create_nav_item("⚙️  Settings", self.show_settings, parent=self.bottom_nav_frame, pady=(0, 0))
 
-        # 2. TOP HEADER BAR
-        self.header = ctk.CTkFrame(self, height=60, fg_color=["white", "#242424"], corner_radius=0, border_width=1, border_color=self.colors["border_light"])
-        self.header.grid(row=0, column=1, sticky="ew")
-        self.header.grid_propagate(False)
-
-        self.page_title = ctk.CTkLabel(self.header, text="Dashboard", font=get_scaled_font(18, "bold", self.font_scale), text_color=self.colors["text_primary"])
-        self.page_title.pack(side="left", padx=30)
-
-        # Header controls for quick appearance and size adjustments
-        self.header_actions = ctk.CTkFrame(self.header, fg_color="transparent")
-        self.header_actions.pack(side="right", padx=20)
-
-        self.zoom_out_button = ctk.CTkButton(
-            self.header_actions,
-            text="A-",
-            width=42,
-            height=34,
-            corner_radius=8,
-            command=lambda: self.adjust_font_scale(-0.1),
-            font=get_scaled_font(11, "bold", self.font_scale)
-        )
-        self.zoom_out_button.pack(side="right", padx=(0, 8))
-
-        self.zoom_in_button = ctk.CTkButton(
-            self.header_actions,
-            text="A+",
-            width=42,
-            height=34,
-            corner_radius=8,
-            command=lambda: self.adjust_font_scale(0.1),
-            font=get_scaled_font(11, "bold", self.font_scale)
-        )
-        self.zoom_in_button.pack(side="right", padx=(0, 8))
-
-        current_mode = ctk.get_appearance_mode().capitalize()
-        self.theme_button = ctk.CTkButton(
-            self.header_actions,
-            text="🌙" if current_mode == "Light" else "☀️",
-            width=82,
-            height=34,
-            corner_radius=8,
-            command=self.toggle_theme,
-            font=get_scaled_font(11, "bold", self.font_scale)
-        )
-        self.theme_button.pack(side="right")
-
-        # 3. CONTENT AREA
+        # 2. CONTENT AREA
         self.content = ctk.CTkFrame(self, fg_color=self.colors["bg_light"], corner_radius=0)
-        self.content.grid(row=1, column=1, sticky="nsew")
+        self.content.grid(row=0, column=1, sticky="nsew")
 
         # 4. STATUS BAR
         self.status_bar = ctk.CTkFrame(self, height=30, fg_color=["#f1f5f9", "#0f172a"], corner_radius=0, border_width=1, border_color=self.colors["border_light"])
-        self.status_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew")
         self.status_bar.grid_propagate(False)
 
         # Status Bar Left: User Info
@@ -163,16 +117,11 @@ class MainWindow(ctk.CTk):
         self.show_dashboard()
 
     def update_fonts(self):
-        self.page_title.configure(font=get_scaled_font(18, "bold", self.font_scale))
         self.status_user_label.configure(font=get_scaled_font(11, "normal", self.font_scale))
         self.db_status.configure(font=get_scaled_font(11, "normal", self.font_scale))
         self.clock_label.configure(font=get_scaled_font(11, "normal", self.font_scale))
         for btn in self.nav_buttons:
             btn.configure(font=get_scaled_font(12, "normal", self.font_scale))
-        if hasattr(self, "theme_button"):
-            self.theme_button.configure(font=get_scaled_font(11, "bold", self.font_scale))
-            self.zoom_out_button.configure(font=get_scaled_font(11, "bold", self.font_scale))
-            self.zoom_in_button.configure(font=get_scaled_font(11, "bold", self.font_scale))
 
     def setup_global_shortcuts(self):
         self.last_activity = datetime.now()
@@ -194,13 +143,7 @@ class MainWindow(ctk.CTk):
             self.after(60000, self.check_database_status)
 
     def toggle_theme(self):
-        current = ctk.get_appearance_mode().lower()
-        new_mode = "dark" if current == "light" else "light"
-        ctk.set_appearance_mode(new_mode)
-        self.config["appearance_mode"] = new_mode
-        save_config(self.config)
-        self.theme_button.configure(text="🌙" if new_mode == "light" else "☀️")
-        self.refresh_all_frames()
+        pass
 
     def adjust_font_scale(self, delta):
         self.font_scale = min(max(self.font_scale + delta, 0.85), 1.5)
@@ -399,7 +342,6 @@ class MainWindow(ctk.CTk):
 
     def show_dashboard(self):
         if not self.check_unsaved_changes(): return
-        self.page_title.configure(text="Dashboard")
         self.clear_content()
         self.current_frame = DashboardFrame(self.content)
         self.current_frame.pack(fill="both", expand=True)
@@ -407,7 +349,6 @@ class MainWindow(ctk.CTk):
 
     def show_logs(self):
         if not self.check_unsaved_changes(): return
-        self.page_title.configure(text="VAWC Logs")
         self.clear_content()
         self.current_frame = LogsTabFrame(self.content, self.username, self.user_role)
         self.current_frame.pack(fill="both", expand=True)
@@ -415,7 +356,6 @@ class MainWindow(ctk.CTk):
 
     def show_add_record(self):
         if not self.check_unsaved_changes(): return
-        self.page_title.configure(text="Add New Record")
         self.clear_content()
         # Do not redirect after save; keep user on Add Record page
         self.current_frame = AddRecordFrame(self.content, self.username, self.user_role, on_save=None)
@@ -424,7 +364,6 @@ class MainWindow(ctk.CTk):
 
     def show_reports(self):
         if not self.check_unsaved_changes(): return
-        self.page_title.configure(text="Reports")
         self.clear_content()
         self.current_frame = ReportsFrame(self.content)
         self.current_frame.pack(fill="both", expand=True)
@@ -432,7 +371,6 @@ class MainWindow(ctk.CTk):
 
     def show_settings(self):
         if not self.check_unsaved_changes(): return
-        self.page_title.configure(text="Settings")
         self.clear_content()
         self.current_frame = SettingsFrame(self.content, self.user_role, self)
         self.current_frame.pack(fill="both", expand=True)
@@ -452,7 +390,6 @@ class MainWindow(ctk.CTk):
         self.current_frame = None
 
     def show_analytics(self):
-        self.page_title.configure(text="Analytics")
         self.clear_content()
         self.current_frame = AnalyticsFrame(self.content)
         self.current_frame.pack(fill="both", expand=True)
@@ -460,14 +397,12 @@ class MainWindow(ctk.CTk):
 
     def show_people(self):
         if not self.check_unsaved_changes(): return
-        self.page_title.configure(text="People")
         self.clear_content()
         self.current_frame = PeopleScreen(self.content, self.username, self.user_role)
         self.current_frame.pack(fill="both", expand=True)
         self.set_active_nav(self.nav_buttons[2])
 
     def show_user_management(self):
-        self.page_title.configure(text="User Management")
         self.clear_content()
         self.current_frame = UserManagementFrame(self.content)
         self.current_frame.pack(fill="both", expand=True)
@@ -476,7 +411,6 @@ class MainWindow(ctk.CTk):
         back_btn.place(x=20, y=10)
 
     def show_audit_logs(self):
-        self.page_title.configure(text="Audit Logs")
         self.clear_content()
         self.current_frame = AuditLogFrame(self.content)
         self.current_frame.pack(fill="both", expand=True)
@@ -490,34 +424,7 @@ class MainWindow(ctk.CTk):
             self.current_frame.search_entry.focus_set()
 
     def logout(self):
-        # Cancel scheduled callbacks and unbind global events to avoid callbacks after destroy
-        try:
-            if getattr(self, '_clock_after_id', None):
-                self.after_cancel(self._clock_after_id)
-        except Exception:
-            pass
-        try:
-            if getattr(self, '_session_after_id', None):
-                self.after_cancel(self._session_after_id)
-        except Exception:
-            pass
-        try:
-            self.unbind_all("<Any-KeyPress>")
-            self.unbind_all("<Any-ButtonPress>")
-        except Exception:
-            pass
-
-        # Destroy current main window and open login screen
-        try:
-            self.destroy()
-        except Exception:
-            pass
-
-        try:
-            from .login import LoginScreen
-            LoginScreen().mainloop()
-        except Exception:
-            try:
-                self.quit()
-            except Exception:
-                pass
+        # Close the main window and return to login screen
+        self.destroy()
+        from .login import LoginScreen
+        LoginScreen().mainloop()

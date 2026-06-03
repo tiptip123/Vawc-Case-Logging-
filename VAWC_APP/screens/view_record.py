@@ -99,14 +99,28 @@ class ViewRecordWindow(ctk.CTkToplevel):
             ).pack(side="left", padx=10, pady=10)
 
             # Value (Content)
-            ctk.CTkLabel(
-                item_frame,
-                text=value,
-                font=("Arial", 12),
-                text_color=["#333333", "#cbd5e1"],  # Readable in both modes
-                wraplength=350,
-                justify="left"
-            ).pack(side="left", padx=10, pady=10)
+            if label == "Type of Abuse":
+                # Render abuses as pill tags similar to Add Record UI
+                abuses = [x.strip() for x in (value or "").split(",") if x.strip()]
+                tags_container = ctk.CTkFrame(item_frame, fg_color="transparent")
+                tags_container.pack(fill="x", padx=10, pady=10)
+                if not abuses:
+                    # show empty subtle label to preserve layout
+                    ctk.CTkLabel(tags_container, text="", font=("Arial", 12), text_color=["#333333", "#cbd5e1"]).pack(anchor="w")
+                else:
+                    for abuse in abuses:
+                        pill = ctk.CTkFrame(tags_container, fg_color=["#e2e8f0", "#334155"], corner_radius=14)
+                        pill.pack(side="left", padx=6, pady=2)
+                        ctk.CTkLabel(pill, text=abuse, font=("Arial", 11), text_color=["#0f172a", "#f8fafc"]).pack(side="left", padx=(10, 8))
+            else:
+                ctk.CTkLabel(
+                    item_frame,
+                    text=value,
+                    font=("Arial", 12),
+                    text_color=["#333333", "#cbd5e1"],  # Readable in both modes
+                    wraplength=350,
+                    justify="left"
+                ).pack(side="left", padx=10, pady=10)
 
         # Print Button and Close Button
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
