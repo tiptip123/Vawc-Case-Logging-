@@ -1,0 +1,10 @@
+.venv/
+vawc.db
+VAWC_APP/vawc_db.sqlite
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+Thumbs.db
+.DS_Store

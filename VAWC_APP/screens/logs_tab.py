@@ -26,6 +26,7 @@ class LogsTabFrame(ctk.CTkFrame):
         self.filter_month = ""
         self.selection_mode = False
         self.selected_vawc_nos = set()
+        self._filter_after_id = None
 
         # Main Layout Container
         self.main_container = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
@@ -46,11 +47,11 @@ class LogsTabFrame(ctk.CTkFrame):
             widget.destroy()
 
         # ================= FILTER SECTION =================
-        filter_card = ctk.CTkFrame(self.table_view, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        filter_card = ctk.CTkFrame(self.table_view, fg_color=["#ffffff", "#1f2937"], corner_radius=16, border_width=1, border_color=["#e2e8f0", "#334155"])
         filter_card.pack(fill="x", padx=20, pady=(20, 10))
         
         filter_grid = ctk.CTkFrame(filter_card, fg_color="transparent")
-        filter_grid.pack(fill="x", padx=20, pady=15)
+        filter_grid.pack(fill="x", padx=20, pady=18)
 
         # Row 1: Search & Abuse Filter
         row1 = ctk.CTkFrame(filter_grid, fg_color="transparent")
@@ -62,10 +63,10 @@ class LogsTabFrame(ctk.CTkFrame):
         self.search_entry = ctk.CTkEntry(search_container, placeholder_text="🔍 Search by name, VAWC No, respondent...", 
                                         height=40, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"])
         self.search_entry.pack(fill="x")
-        self.search_entry.bind("<KeyRelease>", self.on_filter)
+        self.search_entry.bind("<KeyRelease>", self.schedule_filter)
 
         # Abuse Dropdown
-        self.abuse_var = ctk.StringVar()
+        self.abuse_var = ctk.StringVar(value="Type of Abuse")
         self.abuse_combo = ctk.CTkComboBox(row1, variable=self.abuse_var, values=["Type of Abuse"] + self.get_abuse_types(), 
                                            height=40, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"], command=self.on_filter)
         self.abuse_combo.pack(side="left", padx=5)
@@ -74,23 +75,23 @@ class LogsTabFrame(ctk.CTkFrame):
         row2 = ctk.CTkFrame(filter_grid, fg_color="transparent")
         row2.pack(fill="x")
 
-        self.status_var = ctk.StringVar()
+        self.status_var = ctk.StringVar(value="Status")
         self.status_combo = ctk.CTkComboBox(row2, variable=self.status_var, values=["Status", "Ongoing", "Settled", "Referred", "Archived", "Issued BPO"], 
                                             height=40, corner_radius=8, command=self.on_filter)
         self.status_combo.pack(side="left", padx=(0, 10))
 
-        self.year_var = ctk.StringVar()
+        self.year_var = ctk.StringVar(value="Year")
         self.year_combo = ctk.CTkComboBox(row2, variable=self.year_var, values=["Year"] + [str(y) for y in range(datetime.now().year, 2019, -1)], 
                                           height=40, corner_radius=8, command=self.on_filter)
         self.year_combo.pack(side="left", padx=5)
 
-        self.month_var = ctk.StringVar()
+        self.month_var = ctk.StringVar(value="Month")
         self.month_combo = ctk.CTkComboBox(row2, variable=self.month_var, values=["Month", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"], 
                                            height=40, corner_radius=8, command=self.on_filter)
         self.month_combo.pack(side="left", padx=5)
 
-        self.btn_clear = ctk.CTkButton(row2, text="Clear Filters", command=self.clear_filters, fg_color="transparent", 
-                                       text_color=["#64748b", "#94a3b8"], border_width=1, border_color=["#e2e8f0", "#333333"], height=40, corner_radius=8)
+        self.btn_clear = ctk.CTkButton(row2, text="Clear Filters", command=self.clear_filters, fg_color=["#f1f5f9", "#111827"], 
+                                       text_color=["#0f172a", "#f8fafc"], border_width=1, border_color=["#cbd5e1", "#334155"], height=40, corner_radius=10)
         self.btn_clear.pack(side="left", padx=10)
 
         # Record Count Label
@@ -98,7 +99,7 @@ class LogsTabFrame(ctk.CTkFrame):
         self.count_label.pack(side="right", padx=10)
 
         # ================= TABLE SECTION =================
-        table_card = ctk.CTkFrame(self.table_view, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        table_card = ctk.CTkFrame(self.table_view, fg_color=["#ffffff", "#1f2937"], corner_radius=16, border_width=1, border_color=["#e2e8f0", "#334155"])
         table_card.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
         # Action Toolbar
@@ -172,18 +173,6 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.tag_configure("status_referred", foreground="#2563eb") # Blue
 
         # Column alignment (readability)
-        self.tree.column("ID", width=70, anchor="center")
-        self.tree.column("VAWC No", width=140, anchor="center")
-        self.tree.column("Date", width=100, anchor="center")
-        self.tree.column("Client Name", width=180, anchor="w")
-        self.tree.column("Age", width=50, anchor="center")
-        self.tree.column("Type of Abuse", width=160, anchor="w")
-        self.tree.column("Respondent", width=160, anchor="w")
-        self.tree.column("Case Status", width=110, anchor="center")
-        self.tree.column("Referred To", width=140, anchor="w")
-
-
-        # Column Config
         self.tree.column("Select", width=40, anchor="center")
         self.tree.column("ID", width=70, anchor="center")
         self.tree.column("VAWC No", width=140, anchor="w")
@@ -244,21 +233,39 @@ class LogsTabFrame(ctk.CTkFrame):
                 "Emotional Abuse", "Psychological Abuse"
             ]
 
+    def schedule_filter(self, event=None):
+        if getattr(self, '_filter_after_id', None):
+            try:
+                self.after_cancel(self._filter_after_id)
+            except Exception:
+                pass
+        self._filter_after_id = self.after(250, self.on_filter)
+
     def on_filter(self, event=None):
-        self.search_term = self.search_entry.get()
-        self.filter_abuse = self.abuse_var.get()
-        self.filter_status = self.status_var.get()
-        self.filter_year = self.year_var.get()
-        self.filter_month = self.month_var.get()
+        self.search_term = self.search_entry.get().strip()
+        self.filter_abuse = self.abuse_var.get().strip()
+        self.filter_status = self.status_var.get().strip()
+        self.filter_year = self.year_var.get().strip()
+        self.filter_month = self.month_var.get().strip()
+
+        if self.filter_abuse == "Type of Abuse":
+            self.filter_abuse = ""
+        if self.filter_status == "Status":
+            self.filter_status = ""
+        if self.filter_year == "Year":
+            self.filter_year = ""
+        if self.filter_month == "Month":
+            self.filter_month = ""
+
         self.page = 0
         self.load_data()
 
     def clear_filters(self):
         self.search_entry.delete(0, 'end')
-        self.abuse_var.set("")
-        self.status_var.set("")
-        self.year_var.set("")
-        self.month_var.set("")
+        self.abuse_var.set("Type of Abuse")
+        self.status_var.set("Status")
+        self.year_var.set("Year")
+        self.month_var.set("Month")
         self.on_filter()
 
     def load_data(self):

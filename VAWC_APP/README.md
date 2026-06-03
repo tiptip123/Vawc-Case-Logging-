@@ -42,7 +42,7 @@ If you don't have Python installed:
 2. **Login**: Use your credentials (Default Admin: `admin` / `Admin@1234`).
 3. **Navigation**: Use the sidebar to switch between Dashboard, Logs, Reports, and Management.
 4. **Fullscreen**: Press **F8** at any time to enter or exit fullscreen mode.
-5. **Add/Edit**: Changes are saved immediately to the local `vawc.db` file and reflected across the app.
+8. **Add/Edit**: Changes are saved immediately to the local `vawc_db.sqlite` file and reflected across the app.
 
 ## 🛡️ Data Security
 

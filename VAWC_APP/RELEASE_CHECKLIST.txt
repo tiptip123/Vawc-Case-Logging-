@@ -15,7 +15,7 @@ Follow these steps every time you push a new version to GitHub to ensure the "In
 
 3. VERIFY FILE STRUCTURE
    - Ensure all new screens or utils are added to their respective folders.
-   - Check that no sensitive files (like vawc.db) are accidentally included in the manifest "files" list.
+   - Check that no sensitive files (like the local database file) are accidentally included in the manifest "files" list.
 
 4. PUSH TO GITHUB
    - Commit and push all changes.

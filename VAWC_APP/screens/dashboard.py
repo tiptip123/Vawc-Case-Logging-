@@ -101,22 +101,22 @@ class DashboardFrame(ctk.CTkFrame):
                 ctk.CTkLabel(row, text=f"Last update: {updated}", font=("Arial", 10, "italic"), text_color=["#856404", "#fef9c3"]).pack(side="right")
 
     def create_stat_card(self, parent, row, col, label, value, color, icon, is_small_text=False):
-        card = ctk.CTkFrame(parent, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        card = ctk.CTkFrame(parent, fg_color=["#ffffff", "#1f2937"], corner_radius=16, border_width=1, border_color=["#e2e8f0", "#334155"])
         card.grid(row=row, column=col, padx=10, pady=5, sticky="nsew")
         
-        accent = ctk.CTkFrame(card, width=4, fg_color=color, corner_radius=2)
-        accent.place(relx=0, rely=0.2, relheight=0.6)
+        accent = ctk.CTkFrame(card, width=6, fg_color=color, corner_radius=3)
+        accent.place(relx=0, rely=0.16, relheight=0.68)
         
-        ctk.CTkLabel(card, text=icon, font=("Arial", 20)).place(relx=0.9, rely=0.2, anchor="center")
-        ctk.CTkLabel(card, text=label, font=("Arial", 12), text_color=["#64748b", "#94a3b8"]).pack(pady=(20, 0), padx=20, anchor="w")
+        ctk.CTkLabel(card, text=icon, font=("Arial", 22), text_color=["#0f172a", "#f8fafc"]).place(relx=0.9, rely=0.18, anchor="center")
+        ctk.CTkLabel(card, text=label, font=("Arial", 12), text_color=["#64748b", "#cbd5e1"]).pack(pady=(24, 0), padx=20, anchor="w")
         
-        val_font = ("Arial", 18, "bold") if is_small_text else ("Arial", 26, "bold")
-        ctk.CTkLabel(card, text=value, font=val_font, text_color=["#0f172a", "#f8fafc"]).pack(pady=(5, 20), padx=20, anchor="w")
+        val_font = ("Arial", 18, "bold") if is_small_text else ("Arial", 28, "bold")
+        ctk.CTkLabel(card, text=value, font=val_font, text_color=["#0f172a", "#f8fafc"]).pack(pady=(8, 20), padx=20, anchor="w")
 
     def create_list_card(self, parent, row, col, title, title_color):
-        card = ctk.CTkFrame(parent, fg_color=["white", "#242424"], corner_radius=12, border_width=1, border_color=["#e2e8f0", "#333333"])
+        card = ctk.CTkFrame(parent, fg_color=["#ffffff", "#1f2937"], corner_radius=16, border_width=1, border_color=["#e2e8f0", "#334155"])
         card.grid(row=row, column=col, padx=10, pady=5, sticky="nsew")
-        ctk.CTkLabel(card, text=title, font=("Arial", 14, "bold"), text_color=title_color).pack(pady=(15, 10))
+        ctk.CTkLabel(card, text=title, font=("Arial", 14, "bold"), text_color=title_color).pack(pady=(18, 10), padx=20, anchor="w")
         return card
 
     def create_list_row(self, parent, text, val, val_color):

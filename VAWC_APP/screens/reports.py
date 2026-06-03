@@ -26,6 +26,8 @@ class ReportsFrame(ctk.CTkFrame):
         
         ctk.CTkLabel(filter_card, text="🔍 Export Filters", font=("Arial", 16, "bold"), text_color=["#1a2a4a", "#f8fafc"]).pack(anchor="w", padx=20, pady=(15, 5))
         ctk.CTkLabel(filter_card, text="Apply filters below before clicking 'Export Filtered' or 'Export to Excel'.", font=("Arial", 12), text_color=["#64748b", "#94a3b8"]).pack(anchor="w", padx=20, pady=(0, 15))
+        self.status_label = ctk.CTkLabel(filter_card, text="", font=("Arial", 11), text_color=["#16a34a", "#86efac"])
+        self.status_label.pack(anchor="w", padx=20, pady=(0, 10))
         
         filter_grid = ctk.CTkFrame(filter_card, fg_color="transparent")
         filter_grid.pack(fill="x", padx=20, pady=(0, 20))
@@ -61,7 +63,7 @@ class ReportsFrame(ctk.CTkFrame):
         export_grid.grid_columnconfigure((0, 1, 2), weight=1)
 
         # 1. PDF Full List
-        self.create_export_card(
+        self.full_export_card = self.create_export_card(
             export_grid, 0, 0,
             "📄", "Export Full List", "PDF",
             "Generate a complete PDF report of all case records in the system.",
@@ -69,7 +71,7 @@ class ReportsFrame(ctk.CTkFrame):
         )
 
         # 2. PDF Filtered List
-        self.create_export_card(
+        self.filtered_export_card = self.create_export_card(
             export_grid, 0, 1,
             "📄", "Export Filtered", "PDF",
             "Generate a PDF report based on your current search and filters.",
@@ -77,7 +79,7 @@ class ReportsFrame(ctk.CTkFrame):
         )
 
         # 3. Excel Export
-        self.create_export_card(
+        self.excel_export_card = self.create_export_card(
             export_grid, 0, 2,
             "📊", "Export to Excel", "XLSX",
             "Export raw data to a spreadsheet based on filters.",
@@ -101,10 +103,14 @@ class ReportsFrame(ctk.CTkFrame):
         
         ctk.CTkLabel(card, text=desc, font=("Arial", 11), text_color=["#64748b", "#94a3b8"], wraplength=200).pack(pady=(10, 20), padx=20)
         
-        ctk.CTkButton(card, text="Generate Export", fg_color="#1a2a4a", hover_color="#0f1e35", height=38, corner_radius=8, command=command).pack(fill="x", padx=20, pady=(0, 20))
+        action_button = ctk.CTkButton(card, text="Generate Export", fg_color="#1a2a4a", hover_color="#0f1e35", height=38, corner_radius=8, command=command)
+        action_button.pack(fill="x", padx=20, pady=(0, 20))
+        card.action_button = action_button
         
         # Last Export Info
-        ctk.CTkLabel(card, text="Last exported: Never", font=("Arial", 10), text_color=["#94a3b8", "#64748b"]).pack(pady=(0, 15))
+        export_label = ctk.CTkLabel(card, text="Last exported: Never", font=("Arial", 10), text_color=["#94a3b8", "#64748b"])
+        export_label.pack(pady=(0, 15))
+        card.export_label = export_label
 
     def create_report_card(self, parent, title, subtitle, buttons, row=0, col=0, is_full_width=False):
         card = ctk.CTkFrame(parent, fg_color=["white", "#242424"], corner_radius=15)
@@ -128,33 +134,85 @@ class ReportsFrame(ctk.CTkFrame):
 
         return card
 
+    def set_export_status(self, message, error=False):
+        self.status_label.configure(text=message, text_color=["#dc2626", "#fca5a5"] if error else ["#16a34a", "#86efac"])
+
+    def update_card_export_label(self, card, message):
+        if hasattr(card, 'export_label'):
+            card.export_label.configure(text=message)
+
+    def set_export_button_enabled(self, card, enabled=True):
+        if hasattr(card, 'action_button'):
+            card.action_button.configure(state="normal" if enabled else "disabled")
+
     def export_full_pdf(self):
+        self.set_export_status("Exporting complete PDF report...")
+        self.set_export_button_enabled(self.full_export_card, False)
         try:
             export_full_pdf()
+            self.set_export_status("Full report exported successfully.")
+            self.update_card_export_label(self.full_export_card, f"Last exported: {datetime.now().strftime('%b %d, %Y %I:%M %p')}")
         except Exception as e:
+            self.set_export_status("Failed to export full report.", error=True)
             messagebox.showerror("Error", str(e))
+        finally:
+            self.set_export_button_enabled(self.full_export_card, True)
 
     def export_filtered_pdf(self):
+        self.set_export_status("Exporting filtered PDF report...")
+        self.set_export_button_enabled(self.filtered_export_card, False)
         try:
+            filter_status = self.status_var.get()
+            filter_abuse = self.abuse_var.get()
+            filter_year = self.year_var.get()
+            if filter_status == "Status":
+                filter_status = ""
+            if filter_abuse == "Type of Abuse":
+                filter_abuse = ""
+            if filter_year == "Year":
+                filter_year = ""
+
             export_filtered_pdf(
                 search_term=self.search_var.get(),
-                filter_status=self.status_var.get(),
-                filter_abuse=self.abuse_var.get(),
-                filter_year=self.year_var.get()
+                filter_status=filter_status,
+                filter_abuse=filter_abuse,
+                filter_year=filter_year
             )
+            self.set_export_status("Filtered PDF report exported successfully.")
+            self.update_card_export_label(self.filtered_export_card, f"Last exported: {datetime.now().strftime('%b %d, %Y %I:%M %p')}")
         except Exception as e:
+            self.set_export_status("Failed to export filtered PDF.", error=True)
             messagebox.showerror("Error", str(e))
+        finally:
+            self.set_export_button_enabled(self.filtered_export_card, True)
 
     def export_excel(self):
+        self.set_export_status("Exporting spreadsheet...")
+        self.set_export_button_enabled(self.excel_export_card, False)
         try:
+            filter_status = self.status_var.get()
+            filter_abuse = self.abuse_var.get()
+            filter_year = self.year_var.get()
+            if filter_status == "Status":
+                filter_status = ""
+            if filter_abuse == "Type of Abuse":
+                filter_abuse = ""
+            if filter_year == "Year":
+                filter_year = ""
+
             export_to_excel(
                 search_term=self.search_var.get(),
-                filter_status=self.status_var.get(),
-                filter_abuse=self.abuse_var.get(),
-                filter_year=self.year_var.get()
+                filter_status=filter_status,
+                filter_abuse=filter_abuse,
+                filter_year=filter_year
             )
+            self.set_export_status("Spreadsheet exported successfully.")
+            self.update_card_export_label(self.excel_export_card, f"Last exported: {datetime.now().strftime('%b %d, %Y %I:%M %p')}")
         except Exception as e:
+            self.set_export_status("Failed to export spreadsheet.", error=True)
             messagebox.showerror("Error", str(e))
+        finally:
+            self.set_export_button_enabled(self.excel_export_card, True)
 
     def refresh(self):
         self.setup_ui()

@@ -20,6 +20,7 @@ class LoginScreen(ctk.CTk):
         ctk.set_appearance_mode(mode)
         
         self.configure(fg_color=["white", "#1a1a1a"])
+        self.password_visible = False
         
         # Center the window
         screen_width = self.winfo_screenwidth()
@@ -32,6 +33,7 @@ class LoginScreen(ctk.CTk):
         self.main_container = ctk.CTkFrame(self, fg_color=["white", "#1a1a1a"], corner_radius=0)
         self.main_container.pack(fill="both", expand=True)
 
+        self.bind("<Return>", lambda e: self.login())
         self.show_login_view()
 
     def show_login_view(self):
@@ -39,7 +41,7 @@ class LoginScreen(ctk.CTk):
             widget.destroy()
 
         # Left Panel (40%) - Dark Navy
-        left_panel = ctk.CTkFrame(self.main_container, width=400, fg_color=["#0f1e35", "#0a1424"], corner_radius=0)
+        left_panel = ctk.CTkFrame(self.main_container, width=400, fg_color=["#0f1e35", "#071226"], corner_radius=0)
         left_panel.pack(side="left", fill="both")
         left_panel.pack_propagate(False)
 
@@ -48,43 +50,53 @@ class LoginScreen(ctk.CTk):
         left_content.place(relx=0.5, rely=0.5, anchor="center")
 
         # Shield Logo
-        ctk.CTkLabel(left_content, text="🛡️", font=("Arial", 80)).pack(pady=(0, 20))
-        
+        ctk.CTkLabel(left_content, text="🛡️", font=("Arial", 76)).pack(pady=(0, 12))
         ctk.CTkLabel(left_content, text="VAWC", font=("Arial", 32, "bold"), text_color="white").pack()
-        ctk.CTkLabel(left_content, text="Case Logging System", font=("Arial", 16), text_color="#94a3b8").pack(pady=(0, 40))
-        
-        ctk.CTkLabel(left_content, text=self.config['lgu_name'], font=("Arial", 14, "bold"), text_color="white").pack()
-        ctk.CTkLabel(left_content, text=f"{self.config['municipality']}, {self.config['province']}", font=("Arial", 12), text_color="#94a3b8").pack()
+        ctk.CTkLabel(left_content, text="Case Logging System", font=("Arial", 16), text_color="#94a3b8").pack(pady=(0, 30))
+        ctk.CTkLabel(left_content, text=self.config['lgu_name'], font=("Arial", 16, "bold"), text_color="white").pack()
+        ctk.CTkLabel(left_content, text=f"{self.config['municipality']}, {self.config['province']}", font=("Arial", 12), text_color="#94a3b8").pack(pady=(0, 25))
+        ctk.CTkLabel(left_content, text="Secure case management for your barangay", font=("Arial", 12), text_color="#cbd5e1").pack(pady=(0, 8))
 
         # Bottom text in left panel
-        ctk.CTkFrame(left_panel, height=1, fg_color="#1e3a5f", width=300).place(relx=0.5, rely=0.9, anchor="center")
-        ctk.CTkLabel(left_panel, text="Republic of the Philippines", font=("Arial", 10), text_color="#64748b").place(relx=0.5, rely=0.93, anchor="center")
+        ctk.CTkFrame(left_panel, height=1, fg_color="#1e3a5f", width=300).place(relx=0.5, rely=0.88, anchor="center")
+        ctk.CTkLabel(left_panel, text="Republic of the Philippines", font=("Arial", 10), text_color="#64748b").place(relx=0.5, rely=0.91, anchor="center")
 
         # Right Panel (60%)
         right_panel = ctk.CTkFrame(self.main_container, fg_color=["#f8fafc", "#1a1a1a"], corner_radius=0)
         right_panel.pack(side="right", fill="both", expand=True)
 
         # Login Card
-        login_card = ctk.CTkFrame(right_panel, fg_color=["white", "#242424"], width=400, height=450, corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
+        login_card = ctk.CTkFrame(right_panel, fg_color=["#ffffff", "#1f2937"], width=420, height=500, corner_radius=20, border_width=1, border_color=["#e2e8f0", "#343b50"])
         login_card.place(relx=0.5, rely=0.5, anchor="center")
         login_card.pack_propagate(False)
 
-        ctk.CTkLabel(login_card, text="Welcome back", font=("Arial", 24, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(pady=(40, 5))
-        ctk.CTkLabel(login_card, text="Please enter your details", font=("Arial", 14), text_color=["#64748b", "#94a3b8"]).pack(pady=(0, 30))
+        ctk.CTkLabel(login_card, text="Welcome back", font=("Arial", 28, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(pady=(40, 5))
+        ctk.CTkLabel(login_card, text="Sign in to continue to VAWC Case Logging", font=("Arial", 14), text_color=["#64748b", "#cbd5e1"]).pack(pady=(0, 25))
 
         # Form
         form_inner = ctk.CTkFrame(login_card, fg_color="transparent")
         form_inner.pack(fill="both", expand=True, padx=40)
 
         ctk.CTkLabel(form_inner, text="Username", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"], anchor="w").pack(fill="x", pady=(0, 5))
-        self.entry_username = ctk.CTkEntry(form_inner, placeholder_text="Enter your username", height=45, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"], fg_color=["white", "#1a1a1a"], text_color=["#0f172a", "#f8fafc"])
+        self.entry_username = ctk.CTkEntry(form_inner, placeholder_text="Enter your username", height=45, corner_radius=12, border_width=1, border_color=["#d1d5db", "#4b5563"], fg_color=["#f8fafc", "#111827"], text_color=["#0f172a", "#f8fafc"])
         self.entry_username.pack(fill="x", pady=(0, 20))
 
         ctk.CTkLabel(form_inner, text="Password", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"], anchor="w").pack(fill="x", pady=(0, 5))
-        self.entry_password = ctk.CTkEntry(form_inner, placeholder_text="Enter your password", show="*", height=45, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"], fg_color=["white", "#1a1a1a"], text_color=["#0f172a", "#f8fafc"])
-        self.entry_password.pack(fill="x", pady=(0, 25))
+        password_row = ctk.CTkFrame(form_inner, fg_color="transparent")
+        password_row.pack(fill="x", pady=(0, 25))
 
-        self.btn_login = ctk.CTkButton(form_inner, text="Login", height=45, corner_radius=8, fg_color="#1a2a4a", hover_color="#0f1e35", font=("Arial", 14, "bold"), command=self.login)
+        self.entry_password = ctk.CTkEntry(password_row, placeholder_text="Enter your password", show="*", height=45, corner_radius=12, border_width=1, border_color=["#d1d5db", "#4b5563"], fg_color=["#f8fafc", "#111827"], text_color=["#0f172a", "#f8fafc"])
+        self.entry_password.pack(side="left", fill="x", expand=True)
+
+        self.btn_toggle_password = ctk.CTkButton(password_row, text="Show", width=80, height=45, corner_radius=12, fg_color=["#e2e8f0", "#374151"], hover_color=["#d1d5db", "#4b5563"], text_color=["#0f172a", "#f8fafc"], command=self.toggle_password_visibility)
+        self.btn_toggle_password.pack(side="left", padx=(10, 0))
+
+        self.remember_me = ctk.CTkCheckBox(form_inner, text="Remember Me", fg_color=["#e2e8f0", "#374151"], text_color=["#0f172a", "#f8fafc"], hover_color=["#d1d5db", "#4b5563"], font=("Arial", 11))
+        self.remember_me.pack(anchor="w", pady=(0, 12))
+
+        ctk.CTkLabel(form_inner, text="Your password is encrypted and protected.", font=("Arial", 10), text_color=["#475569", "#cbd5e1"], anchor="w").pack(fill="x", pady=(0, 12))
+
+        self.btn_login = ctk.CTkButton(form_inner, text="Login", height=50, corner_radius=14, fg_color="#1a2a4a", hover_color="#111827", font=("Arial", 14, "bold"), command=self.login)
         self.btn_login.pack(fill="x", pady=(0, 15))
 
         self.btn_forgot = ctk.CTkButton(form_inner, text="Forgot Password?", fg_color="transparent", text_color="#2563eb", hover_color=["#eff6ff", "#1e3a5f"], font=("Arial", 12), command=self.open_forgot_password)
@@ -92,6 +104,15 @@ class LoginScreen(ctk.CTk):
 
     def open_forgot_password(self):
         self.show_forgot_password_view()
+
+    def toggle_password_visibility(self):
+        self.password_visible = not self.password_visible
+        if self.password_visible:
+            self.entry_password.configure(show="")
+            self.btn_toggle_password.configure(text="Hide")
+        else:
+            self.entry_password.configure(show="*")
+            self.btn_toggle_password.configure(text="Show")
 
     def show_forgot_password_view(self):
         for widget in self.main_container.winfo_children():

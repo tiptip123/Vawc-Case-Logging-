@@ -709,6 +709,22 @@ class AddRecordFrame(ctk.CTkFrame):
         abuses = [abuse for abuse, var in self.abuse_vars.items() if var.get()]
         if not abuses: errors.append("Type of Abuse (select at least one)")
 
+        if birthdate_str:
+            parsed_birthdate = None
+            for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y", "%Y-%m-%d"):
+                try:
+                    parsed_birthdate = datetime.strptime(birthdate_str, fmt)
+                    birthdate_str = parsed_birthdate.strftime("%m/%d/%Y")
+                    age = str(calculate_age(parsed_birthdate))
+                    self.age_entry.delete(0, "end")
+                    self.age_entry.insert(0, age)
+                    break
+                except ValueError:
+                    continue
+            if parsed_birthdate is None:
+                messagebox.showwarning("Invalid Birthdate", "Please enter a valid birthdate in MM/DD/YYYY format.")
+                return
+        
         if errors:
             messagebox.showwarning("Required Fields", f"Please fill in the following:\n- " + "\n- ".join(errors))
             return

@@ -8,6 +8,7 @@ import tkinter as tk
 from datetime import datetime
 from db import get_connection
 from utils.pdf_export import export_single_pdf
+from utils.helpers import parse_date_string
 from .edit_record import EditRecordWindow
 from .screen_header import ScreenHeader
 
@@ -34,7 +35,14 @@ class ViewRecordWindow(ctk.CTkToplevel):
         # Always bring to front
         self.lift()
         self.attributes("-topmost", True)
-        self.after(200, lambda: self.attributes("-topmost", False))
+        def _safe_unset_topmost():
+            try:
+                if getattr(self, 'winfo_exists', None) and self.winfo_exists():
+                    self.attributes("-topmost", False)
+            except Exception:
+                pass
+
+        self.after(200, _safe_unset_topmost)
 
         try:
             connection = get_connection()
@@ -50,9 +58,9 @@ class ViewRecordWindow(ctk.CTkToplevel):
 
         ScreenHeader(self, f"Record Details - {record[1]}").pack(fill="x")
 
-        # Parse dates
-        date_obj = datetime.strptime(record[2], "%Y-%m-%d") if record[2] else None
-        birthdate_obj = datetime.strptime(record[6], "%Y-%m-%d") if record[6] else None
+        # Parse dates (be tolerant of multiple formats)
+        date_obj = parse_date_string(record[2]) if record[2] else None
+        birthdate_obj = parse_date_string(record[6]) if record[6] else None
 
         fields = [
             ("Date", date_obj.strftime("%m/%d/%Y") if date_obj else ""),

@@ -51,6 +51,23 @@ def calculate_age(birthdate):
     age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
     return age
 
+
+def parse_date_string(date_str):
+    """Try to parse a date string in common formats and return a datetime or None."""
+    if not date_str:
+        return None
+    formats = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"]
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except Exception:
+            continue
+    # Last resort: try to parse with fromisoformat
+    try:
+        return datetime.fromisoformat(date_str)
+    except Exception:
+        return None
+
 def load_config():
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
     default_config = {

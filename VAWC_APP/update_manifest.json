@@ -1,7 +1,7 @@
 {
-    "version": "1.0.4",
-    "release_date": "2026-05-25",
-    "description": "Improves UI accessibility and theming, fixes VAWC number handling, adds safer import/restore and trash management, and upgrades PDF export formatting.",
+    "version": "1.0.5",
+    "release_date": "2026-06-03",
+    "description": "UI polish, export status feedback, safer update compatibility for older installs, improved search/filter UX, and update path handling fixes.",
     "files": [
         "VAWC_APP/version.txt",
         "VAWC_APP/config.json",
@@ -22,6 +22,7 @@
         "VAWC_APP/utils/excel_export.py",
         "VAWC_APP/utils/pdf_export.py",
         "VAWC_APP/update_manifest.json",
+        "VAWC_APP/RELEASE_NOTES_1.0.5.md",
         "VAWC_APP/RELEASE_CHECKLIST.txt",
         "VAWC_APP/requirements.txt"
     ]

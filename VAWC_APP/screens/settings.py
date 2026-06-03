@@ -825,11 +825,31 @@ class UpdatePanel(ctk.CTkFrame):
             return False
 
     def perform_update(self, update_dir, new_version, files, parent=None):
+        app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         timestamp = datetime.now().strftime("%Y_%m_%d_%H%M%S")
-        backups_root = os.path.join(os.getcwd(), "backups")
+        backups_root = os.path.join(app_root, "backups")
         backup_dir = os.path.join(backups_root, f"before_v{new_version}_{timestamp}")
         os.makedirs(backup_dir, exist_ok=True)
         
+        def normalize_dest(path):
+            normalized = path.replace("\\", "/")
+            if normalized.startswith("VAWC_APP/"):
+                normalized = normalized[len("VAWC_APP/"):]
+            return os.path.join(app_root, normalized)
+
+        def find_update_source(path):
+            normalized = path.replace("\\", "/")
+            candidates = [
+                os.path.join(update_dir, normalized),
+                os.path.join(update_dir, os.path.basename(normalized)),
+            ]
+            if normalized.startswith("VAWC_APP/"):
+                candidates.append(os.path.join(update_dir, normalized[len("VAWC_APP/"):]))
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    return candidate
+            raise Exception(f"Update file missing in source: {path}")
+
         # Cleanup old backups (keep last 3)
         try:
             all_backups = sorted([os.path.join(backups_root, d) for d in os.listdir(backups_root) if os.path.isdir(os.path.join(backups_root, d))], key=os.path.getmtime)
@@ -840,47 +860,35 @@ class UpdatePanel(ctk.CTkFrame):
         copied_files = []
         try:
             # 1. PRE-UPDATE DATABASE BACKUP (CRITICAL for data preservation)
-            db_file = "vawc_db.sqlite"
+            db_file = os.path.join(app_root, "vawc_db.sqlite")
             if os.path.exists(db_file):
-                shutil.copy2(db_file, os.path.join(backup_dir, db_file))
+                shutil.copy2(db_file, os.path.join(backup_dir, "vawc_db.sqlite"))
                 print(f"Database backed up to {backup_dir}")
 
             # 2. Check if all files are writable before starting
             for rel_path in files:
-                # Handle path mapping: the manifest might use relative paths from project root
-                dst_path = os.path.join(os.getcwd(), rel_path)
-                if os.path.exists(dst_path):
-                    if not os.access(dst_path, os.W_OK):
-                        raise Exception(f"File is locked: {rel_path}. Please close the application and try again.")
+                dst_path = normalize_dest(rel_path)
+                if os.path.exists(dst_path) and not os.access(dst_path, os.W_OK):
+                    raise Exception(f"File is locked: {rel_path}. Please close the application and try again.")
 
             # 3. Backup existing files
             for rel_path in files:
-                src_path = os.path.join(os.getcwd(), rel_path)
+                src_path = normalize_dest(rel_path)
                 if os.path.exists(src_path):
-                    dst_path = os.path.join(backup_dir, rel_path)
+                    dst_path = os.path.join(backup_dir, os.path.relpath(src_path, app_root))
                     os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                     shutil.copy2(src_path, dst_path)
 
             # 4. Copy New Files
             for rel_path in files:
-                # Logic to find the file in update_dir (it might be flat or nested)
-                update_src = os.path.join(update_dir, os.path.basename(rel_path))
-                if not os.path.exists(update_src):
-                    # Try nested path
-                    update_src = os.path.join(update_dir, rel_path)
-                
-                if not os.path.exists(update_src):
-                    raise Exception(f"Update file missing in source: {rel_path}")
-                
-                dst_path = os.path.join(os.getcwd(), rel_path)
+                update_src = find_update_source(rel_path)
+                dst_path = normalize_dest(rel_path)
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-                
-                # Copy with metadata preserved
                 shutil.copy2(update_src, dst_path)
                 copied_files.append(rel_path)
 
-            # 5. Update version file explicitly in the root if not in manifest
-            version_txt = os.path.join(os.getcwd(), "version.txt")
+            # 5. Update version file explicitly in the current app root
+            version_txt = os.path.join(app_root, "version.txt")
             with open(version_txt, "w") as f:
                 f.write(new_version)
 
