@@ -17,7 +17,7 @@ def parse_date(date_str):
     if not date_str:
         return None
     # Try common formats
-    for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y', '%Y/%m/%d'):
+    for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y', '%Y/%m/%d'):
         try:
             return datetime.strptime(date_str, fmt)
         except ValueError:
@@ -72,9 +72,11 @@ def normalize_record(record):
         'address': record[7],
         'type_of_abuse': record[8],
         'case_status': record[10] if record[10] else 'Ongoing',
-        'attachments': record[11],
+        'assigned_to': record[11] or "",
+        'follow_up_date': parse_date(record[12]),
+        'attachments': record[13] if len(record) > 13 else None,
         'name_of_respondent': record[9],
-        'remarks': record[12]
+        'remarks': record[14] if len(record) > 14 else None
     }
 
 def export_single_pdf(record):
@@ -116,8 +118,37 @@ def export_single_pdf(record):
         ["Types of Abuse", record['type_of_abuse'] or "N/A"],
         ["Name of Respondent", record['name_of_respondent'] or "N/A"],
         ["Current Status", record['case_status'] or "Ongoing"],
+        ["Assigned To", record.get('assigned_to') or ""],
+        # Settled/Follow-up Date: if case was Settled, show updated_at; otherwise show follow_up_date
+        ["Settled/Follow-up Date", ""],
         ["Remarks/Notes", record['remarks'] or "None"]
     ]
+
+    # Determine Settled/Follow-up Date: prefer updated_at when status is Settled
+    settled_or_follow = ""
+    try:
+        if record.get('case_status') and str(record.get('case_status')).strip().lower() == 'settled':
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT updated_at FROM vawc_logs WHERE vawc_no = ?", (record['vawc_no'],))
+            r = cur.fetchone()
+            if r and r[0]:
+                dt = parse_date(r[0])
+                if dt:
+                    settled_or_follow = dt.strftime("%B %d, %Y")
+            cur.close()
+            conn.close()
+        else:
+            if record.get('follow_up_date'):
+                settled_or_follow = record['follow_up_date'].strftime("%B %d, %Y")
+    except Exception:
+        settled_or_follow = ""
+
+    # Insert the computed date into the raw_data table (replace placeholder)
+    for idx, row in enumerate(raw_data):
+        if row[0] == "Settled/Follow-up Date":
+            raw_data[idx][1] = settled_or_follow
+            break
 
     table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]
     for row in raw_data[1:]:
@@ -177,11 +208,21 @@ def export_full_pdf():
 
         connection = get_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, remarks FROM vawc_logs WHERE is_deleted = 0 ORDER BY date DESC")
+        cursor.execute("SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, assigned_to, follow_up_date, updated_at, remarks FROM vawc_logs WHERE is_deleted = 0 ORDER BY date DESC")
         rows = cursor.fetchall()
-
-        raw_data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"]]
+        raw_data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent", "Assigned To", "Follow-up Date"]]
         for row in rows:
+            # Determine Settled/Follow-up date per row: if case_status == 'Settled' use updated_at, else follow_up_date
+            try:
+                follow = ""
+                if str(row[8]).strip().lower() == 'settled':
+                    follow = parse_date(row[12])
+                else:
+                    follow = parse_date(row[11])
+                follow_str = follow.strftime("%m/%d/%Y") if follow else ""
+            except Exception:
+                follow_str = ""
+
             raw_data.append([
                 row[0],
                 row[1],
@@ -189,7 +230,9 @@ def export_full_pdf():
                 row[3],
                 row[7],
                 row[8],
-                row[9]
+                row[9],
+                row[10] if len(row) > 10 else "",
+                follow_str
             ])
 
         table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]
@@ -251,7 +294,7 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
         connection = get_connection()
         cursor = connection.cursor()
         
-        query = "SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, remarks FROM vawc_logs WHERE is_deleted = 0"
+        query = "SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, assigned_to, follow_up_date, updated_at, remarks FROM vawc_logs WHERE is_deleted = 0"
         params = []
         
         if search_term:
@@ -275,8 +318,18 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
-        raw_data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent"]]
+        raw_data = [["VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Case Status", "Respondent", "Assigned To", "Follow-up Date"]]
         for row in rows:
+            try:
+                follow = ""
+                if str(row[8]).strip().lower() == 'settled':
+                    follow = parse_date(row[12])
+                else:
+                    follow = parse_date(row[11])
+                follow_str = follow.strftime("%m/%d/%Y") if follow else ""
+            except Exception:
+                follow_str = ""
+
             raw_data.append([
                 row[0],
                 row[1],
@@ -284,7 +337,9 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
                 row[3],
                 row[7],
                 row[8],
-                row[9]
+                row[9],
+                row[10] if len(row) > 10 else "",
+                follow_str
             ])
 
         table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]

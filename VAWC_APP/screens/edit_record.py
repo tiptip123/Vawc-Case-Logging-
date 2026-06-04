@@ -6,7 +6,7 @@ from tkcalendar import DateEntry
 from datetime import datetime
 from db import get_connection
 from db import get_abuse_types, add_abuse_type, update_abuse_type, delete_abuse_type, ensure_abuse_type
-from utils.helpers import calculate_age
+from utils.helpers import calculate_age, parse_date_string
 
 class EditRecordWindow(ctk.CTkToplevel):
     def __init__(self, parent, vawc_no, user_role="Staff", on_save=None):
@@ -21,7 +21,11 @@ class EditRecordWindow(ctk.CTkToplevel):
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("SELECT * FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+            cursor.execute(
+                "SELECT id, vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, assigned_to, follow_up_date, attachments, remarks, referred_to"
+                " FROM vawc_logs WHERE vawc_no = ?",
+                (vawc_no,)
+            )
             self.record = cursor.fetchone()
             cursor.close()
             connection.close()
@@ -122,7 +126,7 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(form_frame, text="Referred To (Agency)", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         self.referred_entry = ctk.CTkEntry(form_frame, placeholder_text="Enter agency name", border_width=2, corner_radius=8, text_color=["black", "white"])
-        self.referred_entry.insert(0, self.record[13] or "")
+        self.referred_entry.insert(0, self.record[15] or "")
         self.referred_entry.pack(padx=10, pady=(0, 2), fill="x")
         
         self.referred_hint = ctk.CTkLabel(form_frame, text="Set Case Status to 'Referred' to enable this field", font=("Arial", 10), text_color=["#64748b", "#94a3b8"])
@@ -134,6 +138,28 @@ class EditRecordWindow(ctk.CTkToplevel):
         else:
             self.referred_hint.pack_forget()
 
+        ctk.CTkLabel(form_frame, text="Assigned To", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(10, 2))
+        self.assigned_to_entry = ctk.CTkEntry(form_frame, placeholder_text="Assign case to staff", border_width=2, corner_radius=8, text_color=["black", "white"])
+        self.assigned_to_entry.insert(0, self.record[11] or "")
+        self.original_assigned_to = self.record[11] or ""
+        self.assigned_to_entry.pack(padx=10, pady=(0, 10), fill="x")
+
+        ctk.CTkLabel(form_frame, text="Follow-up Date", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
+        self.follow_up_entry = DateEntry(form_frame, date_pattern="mm/dd/yyyy")
+        self.original_follow_up_date = self.record[12]  # Store original value (may be None)
+        if self.record[12]:
+            follow_up_date_obj = parse_date_string(self.record[12])
+            if follow_up_date_obj:
+                try:
+                    self.follow_up_entry.set_date(follow_up_date_obj)
+                except Exception:
+                    pass
+        else:
+            # If no original date, clear the widget by setting to None marker
+            # This prevents defaulting to today
+            self.follow_up_entry.delete(0, "end")
+        self.follow_up_entry.pack(padx=10, pady=(0, 10), fill="x")
+
         ctk.CTkLabel(form_frame, text="Attachments", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         attach_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
         attach_frame.pack(fill="x", padx=10, pady=(0, 10))
@@ -141,13 +167,13 @@ class EditRecordWindow(ctk.CTkToplevel):
         self.attachment_button.pack(side="left")
         self.attachment_label = ctk.CTkLabel(attach_frame, text="No files selected", anchor="w", text_color=["#0f172a", "#f8fafc"])
         self.attachment_label.pack(side="left", padx=(10, 0), fill="x")
-        self.attachments = self.record[11].split(";") if self.record[11] else []
+        self.attachments = self.record[13].split(";") if self.record[13] else []
         if self.attachments:
             self.attachment_label.configure(text="; ".join([os.path.basename(f) for f in self.attachments]))
 
         ctk.CTkLabel(form_frame, text="Remarks", anchor="w", text_color=["#0f172a", "#f8fafc"]).pack(fill="x", padx=10, pady=(0, 2))
         self.remarks_text = ctk.CTkTextbox(form_frame, height=100, corner_radius=8, text_color=["black", "white"])
-        self.remarks_text.insert("1.0", self.record[12] or "")
+        self.remarks_text.insert("1.0", self.record[14] or "")
         self.remarks_text.pack(padx=10, pady=(0, 10), fill="x")
 
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -430,14 +456,25 @@ class EditRecordWindow(ctk.CTkToplevel):
 
         attachments = ";".join(self.attachments) if self.attachments else None
         case_status = self.case_status_var.get()
+        
+        # Handle Follow-up Date: only save if originally set OR if user explicitly changed it
+        follow_up_date_str = self.follow_up_entry.get().strip()
+        if self.original_follow_up_date:
+            # Original was set, always save (user may have edited it)
+            follow_up_date_value = follow_up_date_str if follow_up_date_str else None
+        else:
+            # Original was empty: don't save default DateEntry value
+            follow_up_date_value = None
+        
+        assigned_to = self.assigned_to_entry.get().strip()
 
         try:
             connection = get_connection()
             cursor = connection.cursor()
             cursor.execute("""
-                UPDATE vawc_logs SET vawc_no=?, date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?
+                UPDATE vawc_logs SET vawc_no=?, date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, assigned_to=?, follow_up_date=?, attachments=?, remarks=?, referred_to=?
                 WHERE id=?
-            """, (vawc_no, date, client, int(age) if age else None, contact, birthdate, address, type_of_abuse, respondent, case_status, attachments, remarks, referred_to, self.record[0]))
+            """, (vawc_no, date, client, int(age) if age else None, contact, birthdate, address, type_of_abuse, respondent, case_status, assigned_to, follow_up_date_value, attachments, remarks, referred_to, self.record[0]))
             connection.commit()
             self.vawc_no = vawc_no
             cursor.close()

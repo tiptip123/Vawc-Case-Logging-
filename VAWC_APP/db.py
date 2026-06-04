@@ -61,6 +61,8 @@ def init_db():
                 type_of_abuse TEXT,
                 name_of_respondent TEXT,
                 case_status TEXT DEFAULT 'Ongoing',
+                assigned_to TEXT,
+                follow_up_date TEXT,
                 attachments TEXT,
                 remarks TEXT,
                 referred_to TEXT,
@@ -74,6 +76,14 @@ def init_db():
         # Schema updates for vawc_logs
         try:
             cursor.execute("ALTER TABLE vawc_logs ADD COLUMN referred_to TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE vawc_logs ADD COLUMN assigned_to TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE vawc_logs ADD COLUMN follow_up_date TEXT")
         except sqlite3.OperationalError:
             pass
         try:

@@ -60,7 +60,7 @@ class LogsTabFrame(ctk.CTkFrame):
         # Search
         search_container = ctk.CTkFrame(row1, fg_color="transparent")
         search_container.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        self.search_entry = ctk.CTkEntry(search_container, placeholder_text="🔍 Search by name, VAWC No, respondent...", 
+        self.search_entry = ctk.CTkEntry(search_container, placeholder_text="🔍 Search by name, VAWC No, respondent, assigned staff...", 
                                         height=40, corner_radius=8, border_width=1, border_color=["#e2e8f0", "#333333"])
         self.search_entry.pack(fill="x")
         self.search_entry.bind("<KeyRelease>", self.schedule_filter)
@@ -155,7 +155,7 @@ class LogsTabFrame(ctk.CTkFrame):
 
         self.tree = ttk.Treeview(
             table_frame,
-            columns=("Select", "ID", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Respondent", "Case Status", "Referred To"),
+            columns=("Select", "ID", "VAWC No", "Date", "Client Name", "Age", "Type of Abuse", "Respondent", "Case Status", "Referred To", "Assigned To", "Follow-up Date"),
             show="headings",
             selectmode="browse"
         )
@@ -183,6 +183,8 @@ class LogsTabFrame(ctk.CTkFrame):
         self.tree.column("Respondent", width=160, anchor="w")
         self.tree.column("Case Status", width=100, anchor="center")
         self.tree.column("Referred To", width=120, anchor="w")
+        self.tree.column("Assigned To", width=140, anchor="w")
+        self.tree.column("Follow-up Date", width=120, anchor="center")
 
         for col in self.tree["columns"]:
             self.tree.heading(col, text=col if col != "Select" else "")
@@ -283,9 +285,9 @@ class LogsTabFrame(ctk.CTkFrame):
             params = []
 
             if self.search_term:
-                count_query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\' OR CAST(id AS TEXT) LIKE ? ESCAPE '\\')"
+                count_query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\' OR assigned_to LIKE ? ESCAPE '\\' OR referred_to LIKE ? ESCAPE '\\' OR CAST(id AS TEXT) LIKE ? ESCAPE '\\')"
                 term = f"%{escape_like(self.search_term)}%"
-                params.extend([term, term, term, term])
+                params.extend([term, term, term, term, term, term])
 
             if self.filter_abuse:
                 count_query += " AND type_of_abuse LIKE ? ESCAPE '\\'"
@@ -312,11 +314,11 @@ class LogsTabFrame(ctk.CTkFrame):
                 self.page_label.configure(text=f"Page {self.page + 1} of {total_pages}")
 
             # Fetch data
-            query = "SELECT '☐', id, vawc_no, date, client_name, age, type_of_abuse, name_of_respondent, case_status, referred_to FROM vawc_logs WHERE is_deleted = 0"
+            query = "SELECT '☐', id, vawc_no, date, client_name, age, type_of_abuse, name_of_respondent, case_status, referred_to, assigned_to, follow_up_date FROM vawc_logs WHERE is_deleted = 0"
 
             # Reuse filters from count_query
             if self.search_term:
-                query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\' OR CAST(id AS TEXT) LIKE ? ESCAPE '\\')"
+                query += " AND (client_name LIKE ? ESCAPE '\\' OR vawc_no LIKE ? ESCAPE '\\' OR name_of_respondent LIKE ? ESCAPE '\\' OR assigned_to LIKE ? ESCAPE '\\' OR referred_to LIKE ? ESCAPE '\\' OR CAST(id AS TEXT) LIKE ? ESCAPE '\\')"
             if self.filter_abuse:
                 query += " AND type_of_abuse LIKE ? ESCAPE '\\'"
             if self.filter_status:
@@ -340,11 +342,32 @@ class LogsTabFrame(ctk.CTkFrame):
                 vawc_no = row[2]
                 check_char = "☑" if vawc_no in self.selected_vawc_nos else "☐"
 
-                # Format Referred To with a symbol if present
+                # Format follow-up date if possible
+                follow_up_date = row[11] or ""
+                if follow_up_date:
+                    try:
+                        follow_up_obj = datetime.strptime(follow_up_date, "%Y-%m-%d")
+                        follow_up_date = follow_up_obj.strftime("%m/%d/%Y")
+                    except Exception:
+                        pass
+
                 ref_to = row[9]
                 display_ref = ref_to if ref_to and ref_to != "None" else ""
 
-                display_row = (check_char, row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], display_ref)
+                display_row = (
+                    check_char,
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    row[5],
+                    row[6],
+                    row[7],
+                    row[8],
+                    display_ref,
+                    row[10] or "",
+                    follow_up_date
+                )
                 tag = "evenrow" if i % 2 == 0 else "oddrow"
 
                 # Apply special tag for status colors
@@ -590,6 +613,12 @@ class InlineEditPanel(ctk.CTkFrame):
         self.address_text.configure(state=state)
         self.respondent_entry.configure(state=state)
         self.remarks_text.configure(state=state)
+        self.assigned_to_entry.configure(state=state)
+        # DateEntry (tkcalendar) may not support CTk styling options; set state safely
+        try:
+            self.follow_up_entry.configure(state=state)
+        except Exception:
+            pass
         self.case_status_menu.configure(state=state)
         self.upload_btn.configure(state=state)
         self.abuse_entry.configure(state=state)
@@ -611,8 +640,16 @@ class InlineEditPanel(ctk.CTkFrame):
         border_width = 2 if editable else 0
         text_color = ["black", "white"] if editable else ["#333333", "#cbd5e1"]
 
-        for widget in [self.vawc_no_entry, self.client_entry, self.birthdate_entry, self.age_entry, self.contact_entry, self.respondent_entry]:
+        for widget in [self.vawc_no_entry, self.client_entry, self.birthdate_entry, self.age_entry, self.contact_entry, self.respondent_entry, self.assigned_to_entry]:
+            # Exclude tkcalendar.DateEntry from CTk-specific styling
             widget.configure(fg_color=input_bg, border_width=border_width, text_color=text_color)
+        # Style DateEntry carefully (it doesn't support fg_color/text_color)
+        try:
+            # Only change background/border for CTk widgets; skip for tkcalendar
+            if hasattr(self.follow_up_entry, 'configure'):
+                self.follow_up_entry.configure(state=state)
+        except Exception:
+            pass
         
         self.address_text.configure(fg_color=input_bg, border_width=border_width, text_color=text_color)
         self.remarks_text.configure(fg_color=input_bg, border_width=border_width, text_color=text_color)
@@ -634,7 +671,11 @@ class InlineEditPanel(ctk.CTkFrame):
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("SELECT * FROM vawc_logs WHERE vawc_no = ?", (self.vawc_no,))
+            cursor.execute(
+                "SELECT id, vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, assigned_to, follow_up_date, attachments, remarks, referred_to"
+                " FROM vawc_logs WHERE vawc_no = ?",
+                (self.vawc_no,)
+            )
             record = cursor.fetchone()
             return record
         except Exception as e:
@@ -780,27 +821,44 @@ class InlineEditPanel(ctk.CTkFrame):
         create_label(col7_2, "Referred To (Agency)").pack(fill="x")
         self.referred_entry = ctk.CTkEntry(col7_2, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
         self.referred_entry.pack(fill="x", pady=(5, 0))
-        
+
         # Hint label for referred_to
         self.referred_hint = ctk.CTkLabel(col7_2, text="Set Case Status to 'Referred' to enable this field", 
                                           font=("Arial", 10), text_color="#94a3b8")
         self.referred_hint.pack(anchor="w")
 
-        # Row 8: Attachments
+        # Row 8: Assigned To | Follow-up Date
         row8 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
-        row8.pack(fill="x", pady=15)
-        create_label(row8, "Attachments").pack(fill="x", pady=(0, 5))
+        row8.pack(fill="x", pady=10)
+        row8.grid_columnconfigure((0, 1), weight=1)
+
+        col8_1 = ctk.CTkFrame(row8, fg_color="transparent", corner_radius=0)
+        col8_1.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
+        create_label(col8_1, "Assigned To").pack(fill="x")
+        self.assigned_to_entry = ctk.CTkEntry(col8_1, border_width=2, height=38, border_color=["#dce4ee", "#333333"])
+        self.assigned_to_entry.pack(fill="x", pady=(5, 0))
+
+        col8_2 = ctk.CTkFrame(row8, fg_color="transparent", corner_radius=0)
+        col8_2.grid(row=0, column=1, sticky="nsew")
+        create_label(col8_2, "Follow-up Date").pack(fill="x")
+        self.follow_up_entry = DateEntry(col8_2, date_pattern="mm/dd/yyyy")
+        self.follow_up_entry.pack(fill="x", pady=(5, 0))
+
+        # Row 9: Attachments
+        row9 = ctk.CTkFrame(self.content_frame, fg_color="transparent", corner_radius=0)
+        row9.pack(fill="x", pady=15)
+        create_label(row9, "Attachments").pack(fill="x", pady=(0, 5))
         
         # Thumbnail Preview Area
-        self.thumbnail_frame = ctk.CTkFrame(row8, fg_color="transparent")
+        self.thumbnail_frame = ctk.CTkFrame(row9, fg_color="transparent")
         self.thumbnail_frame.pack(fill="x", pady=(0, 10))
 
-        self.upload_area = ctk.CTkFrame(row8, fg_color=["#f8f9fa", "#1a1a1a"], border_width=2, border_color=["#dce4ee", "#333333"], corner_radius=10, height=60)
+        self.upload_area = ctk.CTkFrame(row9, fg_color=["#f8f9fa", "#1a1a1a"], border_width=2, border_color=["#dce4ee", "#333333"], corner_radius=10, height=60)
         self.upload_area.pack(fill="x")
         self.upload_area.pack_propagate(False)
         self.upload_btn = ctk.CTkButton(self.upload_area, text="📎 Click to attach files", fg_color="transparent", text_color=["#1a2a4a", "#cbd5e1"], command=self.select_attachments)
         self.upload_btn.pack(expand=True)
-        self.file_list_frame = ctk.CTkFrame(row8, fg_color="transparent", corner_radius=0)
+        self.file_list_frame = ctk.CTkFrame(row9, fg_color="transparent", corner_radius=0)
         self.file_list_frame.pack(fill="x", pady=5)
 
         # Populate with initial values
@@ -868,14 +926,27 @@ class InlineEditPanel(ctk.CTkFrame):
         self.selected_abuses = existing_abuses
         self.render_abuse_selected()
 
+        # Assigned To
+        self.assigned_to_entry.delete(0, "end")
+        self.assigned_to_entry.insert(0, self.record[11] or "")
+
+        # Follow-up Date
+        self.follow_up_entry.delete(0, "end")
+        if self.record[12]:
+            try:
+                follow_up_obj = datetime.strptime(self.record[12], "%Y-%m-%d")
+                self.follow_up_entry.set_date(follow_up_obj)
+            except Exception:
+                self.follow_up_entry.insert(0, self.record[12])
+
         # Remarks
         self.remarks_text.delete("1.0", "end")
-        self.remarks_text.insert("1.0", self.record[12] or "")
+        self.remarks_text.insert("1.0", self.record[14] or "")
 
         # Referred To
         self.referred_entry.configure(state="normal")
         self.referred_entry.delete(0, "end")
-        self.referred_entry.insert(0, self.record[13] or "")
+        self.referred_entry.insert(0, self.record[15] or "")
         if not self.is_editable:
             self.referred_entry.configure(state="disabled")
 
@@ -884,8 +955,8 @@ class InlineEditPanel(ctk.CTkFrame):
         self.update_status_style(self.case_status_var.get())
 
         # Attachments
-        if self.record[11]:
-            self.attachments = self.record[11].split(";")
+        if self.record[13]:
+            self.attachments = self.record[13].split(";")
         else:
             self.attachments = []
         self.refresh_file_list()
@@ -1298,9 +1369,9 @@ class InlineEditPanel(ctk.CTkFrame):
             
             cursor.execute("""
                 UPDATE vawc_logs 
-                SET vawc_no=?, date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, attachments=?, remarks=?, referred_to=?, updated_at=CURRENT_TIMESTAMP
+                SET vawc_no=?, date=?, client_name=?, age=?, contact=?, birthdate=?, address=?, type_of_abuse=?, name_of_respondent=?, case_status=?, assigned_to=?, follow_up_date=?, attachments=?, remarks=?, referred_to=?, updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
-            """, (vawc_no, date_str, client, age_int, contact, birthdate_db, address, abuses, respondent, status, attach, remarks, referred_to, self.record[0]))
+            """, (vawc_no, date_str, client, age_int, contact, birthdate_db, address, abuses, respondent, status, self.assigned_to_entry.get().strip(), self.follow_up_entry.get() if self.follow_up_entry.get() else None, attach, remarks, referred_to, self.record[0]))
             connection.commit()
 
             # Log edit action

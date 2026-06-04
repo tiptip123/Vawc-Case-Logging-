@@ -410,7 +410,11 @@ ORDER BY date DESC
         try:
             conn = get_connection()
             cur = conn.cursor()
-            cur.execute("SELECT * FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+            cur.execute(
+                "SELECT id, vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, assigned_to, follow_up_date, attachments, remarks, referred_to"
+                " FROM vawc_logs WHERE vawc_no = ?",
+                (vawc_no,)
+            )
             record = cur.fetchone()
             conn.close()
         except Exception as e:
@@ -450,7 +454,7 @@ ORDER BY date DESC
             parsed = parse_date_string(record[6])
             birthdate_value = parsed.strftime("%m/%d/%Y") if parsed else record[6]
 
-        attachments_value = record[11] or ""
+        attachments_value = record[13] or ""
         fields = [
             ("VAWC Number", record[1] or ""),
             ("Date of Report", date_value),
@@ -462,9 +466,11 @@ ORDER BY date DESC
             ("Type of Abuse", record[8] or ""),
             ("Name of Respondent", record[9] or ""),
             ("Case Status", record[10] or ""),
-            ("Referred To", record[13] or ""),
+            ("Referred To", record[15] or ""),
+            ("Assigned To", record[11] or ""),
+            ("Follow-up Date", parse_date_string(record[12]).strftime("%m/%d/%Y") if record[12] and parse_date_string(record[12]) else (record[12] or "")),
             ("Attachments", attachments_value),
-            ("Case Remarks / Notes", record[12] or "")
+            ("Case Remarks / Notes", record[14] or "")
         ]
 
         for label, value in fields:

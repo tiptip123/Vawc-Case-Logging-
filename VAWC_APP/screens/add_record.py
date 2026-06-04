@@ -57,6 +57,8 @@ class AddRecordFrame(ctk.CTkFrame):
                 "respondent": self.respondent_entry.get(),
                 "remarks": self.remarks_text.get("1.0", "end"),
                 "status": self.case_status_var.get(),
+                "assigned_to": self.assigned_to_entry.get().strip() if hasattr(self, 'assigned_to_entry') else "",
+                "follow_up_date": self.follow_up_entry.get() if hasattr(self, 'follow_up_entry') else "",
                 "vawc_seq": self.vawc_seq_entry.get().strip(),
                 "timestamp": datetime.now().isoformat()
             }
@@ -78,9 +80,16 @@ class AddRecordFrame(ctk.CTkFrame):
                             self.contact_entry.insert(0, data.get("contact", ""))
                             self.address_text.insert("1.0", data.get("address", ""))
                             self.respondent_entry.insert(0, data.get("respondent", ""))
+                            self.assigned_to_entry.insert(0, data.get("assigned_to", ""))
+                            if data.get("follow_up_date"):
+                                try:
+                                    self.follow_up_entry.set_date(data.get("follow_up_date"))
+                                    self.follow_up_was_set = True
+                                except Exception:
+                                    pass
                             self.remarks_text.insert("1.0", data.get("remarks", ""))
-                            self.case_status_var.set(data.get("status", "Settled"))
-                            self.update_status_style(data.get("status", "Settled"))
+                            self.case_status_var.set(data.get("status", "Ongoing"))
+                            self.update_status_style(data.get("status", "Ongoing"))
                             self.update_vawc_preview()
         except (IOError, json.JSONDecodeError):
             pass
@@ -223,6 +232,34 @@ class AddRecordFrame(ctk.CTkFrame):
         self.referred_to_entry = ctk.CTkEntry(col7_2, placeholder_text="Enter agency name", height=42, corner_radius=8, border_width=1, border_color="#e2e8f0")
         self.referred_to_entry.pack(fill="x")
         self.referred_to_entry.configure(state="disabled", fg_color="#f1f5f9")
+
+        row8 = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        row8.pack(fill="x", pady=10)
+        row8.grid_columnconfigure((0, 1), weight=1)
+
+        col8_1 = ctk.CTkFrame(row8, fg_color="transparent")
+        col8_1.grid(row=0, column=0, padx=(0, 15), sticky="nsew")
+        ctk.CTkLabel(col8_1, text="Assigned To", font=("Arial", 12, "bold"), text_color="#0f172a").pack(anchor="w", pady=(0, 5))
+        self.assigned_to_entry = ctk.CTkEntry(col8_1, placeholder_text="Assign case to staff", height=42, corner_radius=8, border_width=1, border_color="#e2e8f0")
+        self.assigned_to_entry.pack(fill="x")
+        self.assigned_to_entry.bind("<Button-1>", self.on_assigned_to_click)
+        self.assigned_to_entry.bind("<FocusIn>", self.on_assigned_to_click)
+        self.assigned_to_entry.bind("<KeyRelease>", self.on_assigned_to_key_release)
+        self.assigned_to_entry.bind("<FocusOut>", lambda e: self.after(100, lambda: self.hide_suggestion_dropdown("assigned_to")))
+
+        col8_2 = ctk.CTkFrame(row8, fg_color="transparent")
+        col8_2.grid(row=0, column=1, sticky="nsew")
+        ctk.CTkLabel(col8_2, text="Follow-up Date", font=("Arial", 12, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(anchor="w", pady=(0, 5))
+        self.follow_up_entry = DateEntry(col8_2, date_pattern="mm/dd/yyyy", font=("Arial", 11))
+        self.follow_up_was_set = False  # Track if user explicitly set this
+        self.follow_up_entry.pack(fill="x", ipady=5)
+        # Track user interaction so we only save an explicitly set follow-up date
+        try:
+            self.follow_up_entry.bind("<<DateEntrySelected>>", lambda e: setattr(self, 'follow_up_was_set', True))
+            self.follow_up_entry.bind("<FocusOut>", lambda e: setattr(self, 'follow_up_was_set', bool(self.follow_up_entry.get().strip())))
+            self.follow_up_entry.bind("<KeyRelease>", lambda e: setattr(self, 'follow_up_was_set', bool(self.follow_up_entry.get().strip())))
+        except Exception:
+            pass
         
         # Add trace to handle referred_to field in add_record
         self.case_status_var.trace_add("write", self.on_status_change_add)
@@ -434,6 +471,50 @@ class AddRecordFrame(ctk.CTkFrame):
             if connection:
                 connection.close()
 
+    def query_staff_suggestions(self, query):
+        connection = None
+        try:
+            connection = get_connection()
+            cursor = connection.cursor()
+            if query and query.strip():
+                search_text = f"%{query.strip().lower()}%"
+                cursor.execute(
+                    """
+                    SELECT username, TRIM(full_name)
+                    FROM users
+                    WHERE role = 'Staff'
+                        AND (
+                            LOWER(username) LIKE ?
+                            OR LOWER(full_name) LIKE ?
+                        )
+                    ORDER BY LOWER(COALESCE(full_name, username))
+                    LIMIT 25
+                    """,
+                    (search_text, search_text)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT username, TRIM(full_name)
+                    FROM users
+                    WHERE role = 'Staff'
+                    ORDER BY LOWER(COALESCE(full_name, username))
+                    LIMIT 25
+                    """
+                )
+            results = []
+            for username, full_name in cursor.fetchall():
+                if full_name:
+                    results.append(f"{full_name} ({username})")
+                else:
+                    results.append(username)
+            return results
+        except Exception:
+            return []
+        finally:
+            if connection:
+                connection.close()
+
     def show_suggestion_dropdown(self, field, entry_widget, suggestions):
         popup_attr = f"{field}_suggestion_popup"
         listbox_attr = f"{field}_suggestion_listbox"
@@ -494,6 +575,11 @@ class AddRecordFrame(ctk.CTkFrame):
             target.delete(0, "end")
             target.insert(0, value)
             target.focus_set()
+        elif field == "assigned_to":
+            target = self.assigned_to_entry
+            target.delete(0, "end")
+            target.insert(0, value)
+            target.focus_set()
         elif field == "abuse":
             self.add_abuse_tag(value)
 
@@ -519,6 +605,24 @@ class AddRecordFrame(ctk.CTkFrame):
             self.show_suggestion_dropdown("client", self.client_entry, suggestions)
         else:
             self.hide_suggestion_dropdown("client")
+
+    def on_assigned_to_click(self, event=None):
+        if self.assigned_to_entry.get().strip():
+            self.on_assigned_to_key_release()
+            return
+        suggestions = self.query_staff_suggestions("")
+        if suggestions:
+            self.show_suggestion_dropdown("assigned_to", self.assigned_to_entry, suggestions)
+        else:
+            self.hide_suggestion_dropdown("assigned_to")
+
+    def on_assigned_to_key_release(self, event=None):
+        value = self.assigned_to_entry.get().strip()
+        suggestions = self.query_staff_suggestions(value)
+        if suggestions:
+            self.show_suggestion_dropdown("assigned_to", self.assigned_to_entry, suggestions)
+        else:
+            self.hide_suggestion_dropdown("assigned_to")
 
     def on_respondent_key_release(self, event=None):
         value = self.respondent_entry.get().strip()
@@ -822,8 +926,15 @@ class AddRecordFrame(ctk.CTkFrame):
         self.hide_suggestion_dropdown("abuse")
 
         self.respondent_entry.delete(0, "end")
-        self.case_status_var.set("Settled")
-        self.update_status_style("Settled")
+        self.assigned_to_entry.delete(0, "end")
+        # Clear follow-up date and reset flag so it won't default/save as today
+        try:
+            self.follow_up_entry.delete(0, "end")
+        except Exception:
+            pass
+        self.follow_up_was_set = False
+        self.case_status_var.set("Ongoing")
+        self.update_status_style("Ongoing")
         self.attachments = []
         self.refresh_file_list()
         self.remarks_text.delete("1.0", "end")
@@ -835,6 +946,8 @@ class AddRecordFrame(ctk.CTkFrame):
         try:
             if self.client_entry.get().strip(): return True
             if self.respondent_entry.get().strip(): return True
+            if self.assigned_to_entry.get().strip(): return True
+            if getattr(self, 'follow_up_was_set', False): return True
             if self.address_text.get("1.0", "end").strip(): return True
             if self.selected_abuses: return True
             if self.abuse_entry.get().strip(): return True
@@ -955,9 +1068,25 @@ class AddRecordFrame(ctk.CTkFrame):
 
             cursor.execute("""
                 INSERT INTO vawc_logs 
-                (vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, attachments, remarks, referred_to)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (vawc_no, date.strftime("%Y-%m-%d"), client, int(age) if age else None, contact, birthdate_str, address, abuses_str, respondent, status, attachments_str, remarks, referred_to))
+                (vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, assigned_to, follow_up_date, attachments, remarks, referred_to)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                vawc_no,
+                date.strftime("%Y-%m-%d"),
+                client,
+                int(age) if age else None,
+                contact,
+                birthdate_str,
+                address,
+                abuses_str,
+                respondent,
+                status,
+                self.assigned_to_entry.get().strip(),
+                self.follow_up_entry.get() if self.follow_up_was_set else None,
+                attachments_str,
+                remarks,
+                referred_to
+            ))
             
             connection.commit()
             

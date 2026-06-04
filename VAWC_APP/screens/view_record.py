@@ -47,7 +47,11 @@ class ViewRecordWindow(ctk.CTkToplevel):
         try:
             connection = get_connection()
             cursor = connection.cursor()
-            cursor.execute("SELECT * FROM vawc_logs WHERE vawc_no = ?", (vawc_no,))
+            cursor.execute(
+                "SELECT id, vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, name_of_respondent, case_status, assigned_to, follow_up_date, attachments, remarks, referred_to"
+                " FROM vawc_logs WHERE vawc_no = ?",
+                (vawc_no,)
+            )
             record = cursor.fetchone()
             cursor.close()
             connection.close()
@@ -70,11 +74,13 @@ class ViewRecordWindow(ctk.CTkToplevel):
             ("Birthdate", birthdate_obj.strftime("%m/%d/%Y") if birthdate_obj else ""),
             ("Address", record[7] or ""),
             ("Type of Abuse", record[8] or ""),
-            ("Case Status", record[10] or "Ongoing"),
-            ("Referred To", record[13] or ""),
-            ("Attachments", record[11] or ""),
             ("Name of Respondent", record[9] or ""),
-            ("Remarks", record[12] or "")
+            ("Case Status", record[10] or "Ongoing"),
+            ("Referred To", record[15] or ""),
+            ("Assigned To", record[11] or ""),
+            ("Follow-up Date", parse_date_string(record[12]).strftime("%m/%d/%Y") if record[12] and parse_date_string(record[12]) else (record[12] or "")),
+            ("Attachments", record[13] or ""),
+            ("Remarks", record[14] or "")
         ]
 
         content_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -157,7 +163,7 @@ class ViewRecordWindow(ctk.CTkToplevel):
         self.btn_close.pack(side="right", padx=(10, 0), pady=5)
 
         # Attachments Section
-        attachments = record[11] or ""
+        attachments = record[13] or ""
         if attachments:
             attachments_frame = ctk.CTkFrame(self, fg_color="transparent")
             attachments_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))

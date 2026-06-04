@@ -3,7 +3,7 @@ from openpyxl.styles import Font
 from tkinter import filedialog
 import os
 from db import get_connection
-from utils.helpers import load_config
+from utils.helpers import load_config, parse_date
 
 def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_year="", filter_month=""):
     config = load_config()
@@ -22,7 +22,7 @@ def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_ye
         ws.cell(row=1, column=1).value = f"REPUBLIC OF THE PHILIPPINES - {config['lgu_name'].upper()} - VAWC RECORDS"
         ws.cell(row=1, column=1).font = Font(bold=True, size=14)
 
-        headers = ["VAWC No", "Date", "Client Name", "Age", "Contact", "Birthdate", "Address", "Type of Abuse", "Case Status", "Respondent", "Remarks", "Referred To"]
+        headers = ["VAWC No", "Date", "Client Name", "Age", "Contact", "Birthdate", "Address", "Type of Abuse", "Case Status", "Respondent", "Assigned To", "Settled/Follow-up Date", "Remarks", "Referred To"]
         for col_num, header in enumerate(headers, 1):
             cell = ws.cell(row=2, column=col_num)
             cell.value = header
@@ -33,7 +33,7 @@ def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_ye
         connection = get_connection()
         cursor = connection.cursor()
         
-        query = "SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, remarks, referred_to FROM vawc_logs WHERE is_deleted = 0"
+        query = "SELECT vawc_no, date, client_name, age, contact, birthdate, address, type_of_abuse, case_status, name_of_respondent, assigned_to, follow_up_date, updated_at, remarks, referred_to FROM vawc_logs WHERE is_deleted = 0"
         params = []
         
         if search_term:
@@ -58,7 +58,37 @@ def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_ye
         rows = cursor.fetchall()
 
         for row_num, row in enumerate(rows, 3):
-            for col_num, cell_value in enumerate(row, 1):
+            settled_or_follow_up = ""
+            try:
+                if str(row[8]).strip().lower() == 'settled':
+                    settled_or_follow_up = parse_date(row[12])
+                else:
+                    settled_or_follow_up = parse_date(row[11])
+                if settled_or_follow_up:
+                    settled_or_follow_up = settled_or_follow_up.strftime("%m/%d/%Y")
+                else:
+                    settled_or_follow_up = ""
+            except Exception:
+                settled_or_follow_up = ""
+
+            row_values = [
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+                row[6],
+                row[7],
+                row[8],
+                row[9],
+                row[10],
+                settled_or_follow_up,
+                row[13],
+                row[14]
+            ]
+
+            for col_num, cell_value in enumerate(row_values, 1):
                 ws.cell(row=row_num, column=col_num).value = str(cell_value) if cell_value else ""
 
         for column in ws.columns:

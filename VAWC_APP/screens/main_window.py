@@ -30,8 +30,7 @@ class MainWindow(ctk.CTk):
         ctk.set_appearance_mode(mode)
         self.font_scale = self.config.get("font_scale", 1.0)
         
-        # Modern 2025 Dimensions
-        self.geometry("1280x800")
+        # Modern 2025 Dimensions - Full Screen
         self.minsize(1200, 750)
         
         # Color Palette
@@ -115,6 +114,9 @@ class MainWindow(ctk.CTk):
 
         self.current_frame = None
         self.show_dashboard()
+        
+        # Set full-screen after layout is complete
+        self.after_idle(lambda: self.state("zoomed"))
 
     def update_fonts(self):
         self.status_user_label.configure(font=get_scaled_font(11, "normal", self.font_scale))
