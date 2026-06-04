@@ -1,7 +1,7 @@
 {
-    "version": "1.0.6",
-    "release_date": "2026-06-03",
-    "description": "UI polish, header whitespace removal, safer update compatibility for older installs, improved search/filter UX, and update path handling fixes.",
+    "version": "1.0.7",
+    "release_date": "2026-06-04",
+    "description": "Fixes for user edit flow, safer update manifest handling, and stability improvements for release.",
     "files": [
         "VAWC_APP/version.txt",
         "VAWC_APP/config.json",
