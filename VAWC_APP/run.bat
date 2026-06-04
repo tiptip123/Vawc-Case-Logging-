@@ -1,6 +1,6 @@
 @echo off
 echo Starting VAWC Case Logging System...
-python main.py
+pythonw "%~dp0main.py"
 if %errorlevel% neq 0 (
     echo.
     echo [CRASH] The application has stopped unexpectedly.

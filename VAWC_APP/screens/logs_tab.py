@@ -514,6 +514,16 @@ class InlineEditPanel(ctk.CTkFrame):
         self.form_card = ctk.CTkFrame(self.scroll_container, fg_color=["white", "#242424"], corner_radius=15, border_width=1, border_color=["#e2e8f0", "#333333"])
         self.form_card.pack(fill="x", padx=40, pady=10)
 
+        # Header Banner
+        self.header_banner = ctk.CTkFrame(self.form_card, fg_color=["#1a2a4a", "#0f172a"], corner_radius=15, height=70)
+        self.header_banner.pack(fill="x", padx=0, pady=0)
+        self.header_banner.pack_propagate(False)
+
+        self.title_label = ctk.CTkLabel(self.header_banner, text=f"Record Details: {self.vawc_no}", font=("Arial", 18, "bold"), text_color="white")
+        self.title_label.pack(pady=(12, 1))
+        self.subtitle_label = ctk.CTkLabel(self.header_banner, text="Viewing record details", font=("Arial", 11), text_color="#e0e0e0")
+        self.subtitle_label.pack()
+
         # Content Container
         self.content_frame = ctk.CTkFrame(self.form_card, fg_color="transparent", corner_radius=0)
         self.content_frame.pack(fill="x", padx=30, pady=25)

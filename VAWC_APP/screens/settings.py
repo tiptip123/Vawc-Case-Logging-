@@ -9,10 +9,100 @@ from datetime import datetime
 
 from db import DB_FILE
 from utils.db_backup import validate_import_file, restore_database
+from utils.helpers import save_config
 
 import threading
 import zipfile
 import io
+
+
+def perform_update(update_dir, new_version, files, settings, parent=None):
+    app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    timestamp = datetime.now().strftime("%Y_%m_%d_%H%M%S")
+    backups_root = os.path.join(app_root, "backups")
+    backup_dir = os.path.join(backups_root, f"before_v{new_version}_{timestamp}")
+    os.makedirs(backup_dir, exist_ok=True)
+
+    def normalize_dest(path):
+        normalized = path.replace("\\", "/")
+        if normalized.startswith("VAWC_APP/"):
+            normalized = normalized[len("VAWC_APP/"):]
+        return os.path.join(app_root, normalized)
+
+    def find_update_source(path):
+        normalized = path.replace("\\", "/")
+        candidates = [
+            os.path.join(update_dir, normalized),
+            os.path.join(update_dir, os.path.basename(normalized)),
+        ]
+        if normalized.startswith("VAWC_APP/"):
+            candidates.append(os.path.join(update_dir, normalized[len("VAWC_APP/"):] ))
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        raise Exception(f"Update file missing in source: {path}")
+
+    def restart_app():
+        try:
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
+        except Exception:
+            subprocess.Popen([sys.executable, "main.py"])
+            sys.exit()
+
+    # Cleanup old backups (keep last 3)
+    try:
+        all_backups = sorted([os.path.join(backups_root, d) for d in os.listdir(backups_root) if os.path.isdir(os.path.join(backups_root, d))], key=os.path.getmtime)
+        while len(all_backups) > 3:
+            shutil.rmtree(all_backups.pop(0))
+    except: pass
+
+    copied_files = []
+    try:
+        # 1. PRE-UPDATE DATABASE BACKUP
+        db_file = os.path.join(app_root, "vawc_db.sqlite")
+        if os.path.exists(db_file):
+            shutil.copy2(db_file, os.path.join(backup_dir, "vawc_db.sqlite"))
+
+        # 2. Check if all files are writable before starting
+        for rel_path in files:
+            dst_path = normalize_dest(rel_path)
+            if os.path.exists(dst_path) and not os.access(dst_path, os.W_OK):
+                raise Exception(f"File is locked: {rel_path}. Please close the application and try again.")
+
+        # 3. Backup existing files
+        for rel_path in files:
+            src_path = normalize_dest(rel_path)
+            if os.path.exists(src_path):
+                dst_path = os.path.join(backup_dir, os.path.relpath(src_path, app_root))
+                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                shutil.copy2(src_path, dst_path)
+
+        # 4. Copy new files
+        for rel_path in files:
+            update_src = find_update_source(rel_path)
+            dst_path = normalize_dest(rel_path)
+            os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+            shutil.copy2(update_src, dst_path)
+            copied_files.append(rel_path)
+
+        # 5. Update version file explicitly in the current app root
+        version_txt = os.path.join(app_root, "version.txt")
+        with open(version_txt, "w") as f:
+            f.write(new_version)
+
+        settings.show_banner(f"Update to v{new_version} complete! Restart recommended.", parent=parent or settings)
+        if messagebox.askyesno("Restart Application", "Update complete. Restart application now to apply changes?", parent=parent or settings):
+            restart_app()
+
+    except Exception as e:
+        print(f"Update failed: {e}. Starting rollback...")
+        for rel_path in copied_files:
+            backup_file = os.path.join(backup_dir, rel_path)
+            original_file = os.path.join(app_root, rel_path)
+            if os.path.exists(backup_file):
+                shutil.copy2(backup_file, original_file)
+        settings.show_banner(f"Update failed: {str(e)}. System restored to previous state.", type="error", parent=parent or settings)
 
 class SettingsFrame(ctk.CTkFrame):
     def __init__(self, parent, user_role, main_window):
@@ -643,7 +733,7 @@ class OnlineUpdatePanel(ctk.CTkFrame):
                     files.append(rel)
             
             if messagebox.askyesno("Confirm Update", f"Install offline update (Version: {new_version})?"):
-                self.settings.perform_update(src_root, new_version, files, parent=self)
+                perform_update(src_root, new_version, files, settings=self.settings, parent=self)
             else:
                 if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
                 
@@ -707,6 +797,8 @@ class OnlineUpdatePanel(ctk.CTkFrame):
                 self.after(0, self.settings.setup_main_view)
                 return
             response = requests.get(url, stream=True)
+            if response.status_code != 200:
+                raise Exception(f"Download failed with status code {response.status_code}.")
             total_size = int(response.headers.get('content-length', 0))
             
             bytes_downloaded = 0
@@ -726,6 +818,7 @@ class OnlineUpdatePanel(ctk.CTkFrame):
             if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
             os.makedirs(temp_dir)
             
+            zip_buffer.seek(0)
             with zipfile.ZipFile(zip_buffer) as z:
                 z.extractall(temp_dir)
             
@@ -744,7 +837,7 @@ class OnlineUpdatePanel(ctk.CTkFrame):
                     
                     files_to_update.append(rel_path)
             
-            self.after(0, lambda: self.settings.perform_update(temp_dir, version, files_to_update, parent=self))
+            self.after(0, lambda: perform_update(temp_dir, version, files_to_update, settings=self.settings, parent=self))
             
         except Exception as e:
             self.after(0, lambda: messagebox.showerror("Download Error", f"Failed to download update: {str(e)}"))
@@ -787,7 +880,7 @@ class UpdatePanel(ctk.CTkFrame):
             if self.is_newer(new_version, self.current_version):
                 self.status_label.configure(text=f"New Version Available: v{new_version}", text_color="#16a34a")
                 self.settings.show_confirmation_banner(f"Update v{new_version} found. Description: {description}. Install now?", 
-                                                       lambda: self.perform_update(update_dir, new_version, files), parent=self)
+                                                       lambda: perform_update(update_dir, new_version, files, settings=self.settings, parent=self), parent=self)
             else:
                 self.settings.show_banner(f"No update needed. You are running v{self.current_version}.", parent=self)
         except Exception as e:
@@ -800,87 +893,7 @@ class UpdatePanel(ctk.CTkFrame):
             return False
 
     def perform_update(self, update_dir, new_version, files, parent=None):
-        app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        timestamp = datetime.now().strftime("%Y_%m_%d_%H%M%S")
-        backups_root = os.path.join(app_root, "backups")
-        backup_dir = os.path.join(backups_root, f"before_v{new_version}_{timestamp}")
-        os.makedirs(backup_dir, exist_ok=True)
-        
-        def normalize_dest(path):
-            normalized = path.replace("\\", "/")
-            if normalized.startswith("VAWC_APP/"):
-                normalized = normalized[len("VAWC_APP/"):]
-            return os.path.join(app_root, normalized)
-
-        def find_update_source(path):
-            normalized = path.replace("\\", "/")
-            candidates = [
-                os.path.join(update_dir, normalized),
-                os.path.join(update_dir, os.path.basename(normalized)),
-            ]
-            if normalized.startswith("VAWC_APP/"):
-                candidates.append(os.path.join(update_dir, normalized[len("VAWC_APP/"):]))
-            for candidate in candidates:
-                if os.path.exists(candidate):
-                    return candidate
-            raise Exception(f"Update file missing in source: {path}")
-
-        # Cleanup old backups (keep last 3)
-        try:
-            all_backups = sorted([os.path.join(backups_root, d) for d in os.listdir(backups_root) if os.path.isdir(os.path.join(backups_root, d))], key=os.path.getmtime)
-            while len(all_backups) > 3:
-                shutil.rmtree(all_backups.pop(0))
-        except: pass
-
-        copied_files = []
-        try:
-            # 1. PRE-UPDATE DATABASE BACKUP (CRITICAL for data preservation)
-            db_file = os.path.join(app_root, "vawc_db.sqlite")
-            if os.path.exists(db_file):
-                shutil.copy2(db_file, os.path.join(backup_dir, "vawc_db.sqlite"))
-                print(f"Database backed up to {backup_dir}")
-
-            # 2. Check if all files are writable before starting
-            for rel_path in files:
-                dst_path = normalize_dest(rel_path)
-                if os.path.exists(dst_path) and not os.access(dst_path, os.W_OK):
-                    raise Exception(f"File is locked: {rel_path}. Please close the application and try again.")
-
-            # 3. Backup existing files
-            for rel_path in files:
-                src_path = normalize_dest(rel_path)
-                if os.path.exists(src_path):
-                    dst_path = os.path.join(backup_dir, os.path.relpath(src_path, app_root))
-                    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-                    shutil.copy2(src_path, dst_path)
-
-            # 4. Copy New Files
-            for rel_path in files:
-                update_src = find_update_source(rel_path)
-                dst_path = normalize_dest(rel_path)
-                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-                shutil.copy2(update_src, dst_path)
-                copied_files.append(rel_path)
-
-            # 5. Update version file explicitly in the current app root
-            version_txt = os.path.join(app_root, "version.txt")
-            with open(version_txt, "w") as f:
-                f.write(new_version)
-
-            # Show success
-            self.settings.show_banner(f"Update to v{new_version} complete! Restart recommended.", parent=self)
-            self.show_confirmation_banner("Restart application now?", self.restart_app, type="warning", parent=self)
-
-        except Exception as e:
-            # ROLLBACK
-            print(f"Update failed: {e}. Starting rollback...")
-            for rel_path in copied_files:
-                backup_file = os.path.join(backup_dir, rel_path)
-                original_file = os.path.join(os.getcwd(), rel_path)
-                if os.path.exists(backup_file):
-                    shutil.copy2(backup_file, original_file)
-            
-            self.settings.show_banner(f"Update failed: {str(e)}. System restored to previous state.", type="error", parent=self)
+        perform_update(update_dir, new_version, files, settings=self.settings, parent=parent or self)
 
     def confirm_logout(self):
         self.settings.show_confirmation_banner("Are you sure you want to logout?", 
@@ -926,7 +939,6 @@ class AppearancePanel(ctk.CTkFrame):
         ctk.set_appearance_mode(mode)
         
         # Save to config
-        from utils.helpers import save_config
         self.main_window.config["appearance_mode"] = mode
         save_config(self.main_window.config)
         

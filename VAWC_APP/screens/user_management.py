@@ -4,6 +4,7 @@ from db import get_connection
 from utils.helpers import make_circle_image
 import base64
 import io
+import sqlite3
 from PIL import Image, ImageTk, ImageDraw
 import bcrypt
 
@@ -77,12 +78,20 @@ class UserManagementFrame(ctk.CTkFrame):
         self.tree.heading("Username", text="USERNAME")
         self.tree.heading("Full Name", text="FULL NAME")
         self.tree.heading("Role", text="ROLE")
+        self.tree.heading("Status", text="STATUS")
         # Configure tags with single strings
         self.tree.tag_configure("evenrow", background="#242424" if is_dark else "#ffffff", foreground="#ffffff" if is_dark else "#000000")
         self.tree.tag_configure("oddrow", background="#1e1e1e" if is_dark else "#f8fafc", foreground="#ffffff" if is_dark else "#000000")
 
         for col in self.tree["columns"]:
-            self.tree.column(col, anchor="w", width=200)
+            width = 100 if col == "Status" else 200
+            anchor = "center" if col == "Status" else "w"
+            self.tree.column(col, anchor=anchor, width=width)
+
+        # Bind both selection and click events so edit actions see the selected row.
+        self.tree.bind('<<TreeviewSelect>>', self.on_row_select)
+        self.tree.bind('<ButtonRelease-1>', self.on_row_click)
+        self.tree.bind('<Double-1>', lambda event: self.edit_user())
 
         # Custom Scrollbar
         scrollbar = ctk.CTkScrollbar(table_frame, orientation="vertical", command=self.tree.yview)
@@ -159,6 +168,17 @@ class UserManagementFrame(ctk.CTkFrame):
         for widget in self.winfo_children(): widget.destroy()
         AddUserPanel(self, on_save=self.setup_ui, on_cancel=self.setup_ui)
 
+    def on_row_select(self, event):
+        selected = self.tree.selection()
+        if selected:
+            self.tree.focus(selected[0])
+
+    def on_row_click(self, event):
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.selection_set(item)
+            self.tree.focus(item)
+
     def delete_user(self):
         item = self.tree.selection()
         if not item:
@@ -168,17 +188,11 @@ class UserManagementFrame(ctk.CTkFrame):
         
         # Security: Prevent deleting protected users or own account
         if username == "admin":
-             messagebox.showerror("Restricted", "The default admin account cannot be deleted.")
-             return
+            messagebox.showerror("Restricted", "The default admin account cannot be deleted.")
+            return
 
-        # Use SettingsFrame for inline confirmation if available
-        settings = self.winfo_toplevel().current_frame
-        if hasattr(settings, 'show_confirmation_banner'):
-            settings.show_confirmation_banner(f"Are you sure you want to delete user {username}?", 
-                                               lambda: self.do_delete(username))
-        else:
-            if messagebox.askyesno("Confirm", f"Delete user {username}?"):
-                self.do_delete(username)
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete user '{username}'?\nThis cannot be undone."):
+            self.do_delete(username)
 
     def do_delete(self, username):
         connection = None
@@ -202,11 +216,24 @@ class UserManagementFrame(ctk.CTkFrame):
                 connection.close()
 
     def edit_user(self):
-        item = self.tree.selection()
-        if not item:
-            messagebox.showwarning("Warning", "Please select a user to edit.")
+        selected = self.tree.selection()
+        if not selected:
+            focused = self.tree.focus()
+            if focused:
+                selected = (focused,)
+
+        if not selected:
+            messagebox.showwarning("No Selection", "Please click on a user row to select it, then click Edit User.")
             return
-        username = self.tree.item(item[0], "values")[0]
+
+        try:
+            values = self.tree.item(selected[0], "values")
+            if not values:
+                raise ValueError("No values found for selected row.")
+            username = values[0]
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not read the selected user: {e}")
+            return
         
         # Switch to inline edit panel
         for widget in self.winfo_children(): widget.destroy()
@@ -230,20 +257,26 @@ class EditUserPanel(ctk.CTkScrollableFrame):
         if not self.user_data:
             self.on_cancel()
             return
-            
+        self.profile_pic_base64 = self.user_data.get('profile_picture') if isinstance(self.user_data, dict) else None
         self.setup_ui()
 
     def load_user_data(self):
-        import sqlite3
         connection = None
         try:
             connection = get_connection()
             connection.row_factory = sqlite3.Row
             cursor = connection.cursor()
             cursor.execute("SELECT * FROM users WHERE username = ?", (self.target_username,))
-            return cursor.fetchone()
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return dict(row)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load user data: {e}")
+            return None
         finally:
-            if connection: connection.close()
+            if connection:
+                connection.close()
 
     def setup_ui(self):
         # Two-column layout in a more compact container
@@ -268,23 +301,21 @@ class EditUserPanel(ctk.CTkScrollableFrame):
         self.avatar_label = ctk.CTkLabel(self.avatar_frame, text="")
         self.avatar_label.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Load existing pic
-        self.profile_pic_base64 = self.user_data['profile_picture'] # profile_picture column (base64 string)
-        self.refresh_avatar_display()
-
         # Change Photo Button
         ctk.CTkButton(left_sec, text="📷 Change Photo", fg_color="#1a2a4a", hover_color="#0f1e35", height=32, width=140, corner_radius=8, command=self.upload_pic).pack(pady=10)
 
         # Fields
         ctk.CTkLabel(left_sec, text="Full Name *", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(15, 2))
         self.entry_fullname = ctk.CTkEntry(left_sec, height=40, placeholder_text="Enter full name")
-        self.entry_fullname.insert(0, self.user_data['full_name'] or "")
+        self.entry_fullname.insert(0, self.user_data.get('full_name', '') if isinstance(self.user_data, dict) else "")
         self.entry_fullname.pack(fill="x")
 
         ctk.CTkLabel(left_sec, text="Username *", font=("Arial", 11, "bold"), anchor="w").pack(fill="x", pady=(15, 2))
         self.entry_username = ctk.CTkEntry(left_sec, height=40, placeholder_text="Enter username")
-        self.entry_username.insert(0, self.user_data['username'])
+        self.entry_username.insert(0, self.user_data.get('username', '') if isinstance(self.user_data, dict) else "")
         self.entry_username.pack(fill="x")
+
+        self.refresh_avatar_display()
 
         # Right Section: Security
         right_sec = ctk.CTkFrame(container, fg_color="transparent")
@@ -314,7 +345,7 @@ class EditUserPanel(ctk.CTkScrollableFrame):
             "In what city were you born?",
             "What is your favorite book?"
         ]
-        self.sec_var = ctk.StringVar(value=self.user_data['security_question'] or self.questions[0])
+        self.sec_var = ctk.StringVar(value=self.user_data.get('security_question') or self.questions[0])
         self.sec_combo = ctk.CTkComboBox(right_sec, values=self.questions, variable=self.sec_var, height=40)
         self.sec_combo.pack(fill="x")
 
@@ -368,17 +399,42 @@ class EditUserPanel(ctk.CTkScrollableFrame):
 
     def refresh_avatar_display(self):
         # Clear existing
-        for w in self.avatar_frame.winfo_children(): w.destroy()
-        
+        for w in self.avatar_frame.winfo_children():
+            w.destroy()
+
         self.avatar_img = make_circle_image(self.profile_pic_base64, size=self.avatar_size)
-        
+
         if self.avatar_img:
             ctk.CTkLabel(self.avatar_frame, image=self.avatar_img, text="").place(relx=0.5, rely=0.5, anchor="center")
+            return
+
+        # Initials placeholder
+        fullname = ""
+        try:
+            fullname = self.entry_fullname.get().strip()
+        except Exception:
+            pass
+
+        if not fullname and isinstance(self.user_data, dict):
+            fullname = self.user_data.get('full_name') or self.user_data.get('username') or self.target_username
+
+        if not fullname:
+            fullname = self.target_username
+
+        parts = fullname.strip().split()
+        if len(parts) >= 2:
+            initials = parts[0][0].upper() + parts[-1][0].upper()
+        elif parts:
+            initials = parts[0][0].upper()
         else:
-            # Initials placeholder
-            fullname = self.entry_fullname.get().strip() or self.target_username
-            initial = fullname[0].upper() if fullname else "?"
-            ctk.CTkLabel(self.avatar_frame, text=initial, font=("Arial", 32, "bold"), text_color=["#1a2a4a", "#f8fafc"]).place(relx=0.5, rely=0.5, anchor="center")
+            initials = "?"
+
+        ctk.CTkLabel(
+            self.avatar_frame,
+            text=initials,
+            font=("Arial", 32, "bold"),
+            text_color=["#1a2a4a", "#f8fafc"]
+        ).place(relx=0.5, rely=0.5, anchor="center")
 
     def save(self):
         fullname = self.entry_fullname.get().strip()
@@ -414,12 +470,23 @@ class EditUserPanel(ctk.CTkScrollableFrame):
                     messagebox.showerror("Error", "Username already taken.")
                     return
 
-            # Update basic info
-            cursor.execute("""
-                UPDATE users 
-                SET full_name = ?, username = ?, profile_picture = ?, security_question = ?
-                WHERE username = ?
-            """, (fullname, username, self.profile_pic_base64, sec_q, self.target_username))
+            # Update base user info
+            cursor.execute(
+                "UPDATE users SET full_name = ?, username = ? WHERE username = ?",
+                (fullname, username, self.target_username)
+            )
+
+            # Update profile picture safely if supported
+            try:
+                cursor.execute("UPDATE users SET profile_picture = ? WHERE username = ?", (self.profile_pic_base64, username))
+            except sqlite3.OperationalError:
+                pass
+
+            # Update security question safely if supported
+            try:
+                cursor.execute("UPDATE users SET security_question = ? WHERE username = ?", (sec_q, username))
+            except sqlite3.OperationalError:
+                pass
 
             # Update password if provided
             if new_pass:
@@ -428,23 +495,26 @@ class EditUserPanel(ctk.CTkScrollableFrame):
 
             # Update passcode if provided
             if passcode:
+                if not passcode.isdigit() or len(passcode) != 6:
+                    messagebox.showwarning("Invalid Passcode", "Passcode must be exactly 6 digits.")
+                    return
                 hashed_pc = bcrypt.hashpw(passcode.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                cursor.execute("UPDATE users SET passcode = ? WHERE username = ?", (hashed_pc, username))
+                try:
+                    cursor.execute("UPDATE users SET passcode = ? WHERE username = ?", (hashed_pc, username))
+                except sqlite3.OperationalError:
+                    pass
 
             # Update security answer if provided
             if sec_a:
                 hashed_sa = bcrypt.hashpw(sec_a.lower().encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                cursor.execute("UPDATE users SET security_answer = ? WHERE username = ?", (hashed_sa, username))
+                try:
+                    cursor.execute("UPDATE users SET security_answer = ? WHERE username = ?", (hashed_sa, username))
+                except sqlite3.OperationalError:
+                    pass
 
             connection.commit()
             
-            # Show inline success message instead of messagebox
-            # We'll need to reach back to SettingsFrame for show_banner
-            settings = self.winfo_toplevel().current_frame
-            if hasattr(settings, 'show_banner'):
-                settings.show_banner(f"User {username} updated successfully.", "success", parent=self)
-            else:
-                messagebox.showinfo("Success", f"User {username} updated successfully.")
+            messagebox.showinfo("Success", f"User '{username}' updated successfully.")
             
             # Update sidebar if editing own profile
             main_window = self.winfo_toplevel()
@@ -453,7 +523,6 @@ class EditUserPanel(ctk.CTkScrollableFrame):
                 main_window.setup_sidebar_user_info()
 
             self.on_save()
-            self.on_cancel() # Return to list after save
         except Exception as e:
             messagebox.showerror("Error", str(e))
         finally:
@@ -687,10 +756,11 @@ class AddUserPanel(ctk.CTkFrame):
             cursor.close()
             connection.close()
             
-            settings = self.winfo_toplevel().current_frame
-            if hasattr(settings, 'show_banner'):
-                settings.show_banner(f"User {data['username']} created.", "success", parent=self.master)
-            
+            if hasattr(self.winfo_toplevel(), 'current_frame') and hasattr(self.winfo_toplevel().current_frame, 'show_banner'):
+                self.winfo_toplevel().current_frame.show_banner(f"User {data['username']} created.", "success", parent=self.master)
+            else:
+                messagebox.showinfo("Success", f"User '{data['username']}' created successfully.")
+
             self.on_save()
         except Exception as e:
             messagebox.showerror("Error", str(e))

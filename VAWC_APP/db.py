@@ -163,6 +163,14 @@ def init_db():
             cursor.execute("ALTER TABLE users ADD COLUMN lockout_until TEXT")
         except sqlite3.OperationalError:
             pass
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass
 
         # Seed default admin user if not exists
         cursor.execute("SELECT COUNT(*) FROM users WHERE username = ?", ('admin',))
