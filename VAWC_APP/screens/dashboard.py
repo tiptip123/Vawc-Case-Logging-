@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from db import get_connection
 from datetime import datetime, timedelta
+from utils.helpers import parse_date_string
 from .screen_header import ScreenHeader
 
 class DashboardFrame(ctk.CTkFrame):
@@ -41,6 +42,30 @@ class DashboardFrame(ctk.CTkFrame):
         sorted_abuse = sorted(self.abuse_counts.items(), key=lambda x: x[1], reverse=True)
         top_abuse = sorted_abuse[0][0] if sorted_abuse else "None"
         self.create_stat_card(stats_frame, 0, 3, "Common Abuse", top_abuse, "#8b0000", "⚖️", is_small_text=True)
+
+        schedule_card = ctk.CTkFrame(self.scroll_container, fg_color=["white", "#242424"], corner_radius=16, border_width=1, border_color=["#e2e8f0", "#333333"])
+        schedule_card.pack(fill="x", padx=20, pady=(0, 10))
+        ctk.CTkLabel(schedule_card, text="⏰ Case Follow-up Schedule", font=("Arial", 14, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(pady=(18, 4), padx=20, anchor="w")
+
+        followup_summary = f"{len(self.followup_records)} pending follow-up(s)"
+        if self.overdue_count:
+            followup_summary += f" · {self.overdue_count} overdue"
+        ctk.CTkLabel(schedule_card, text=followup_summary, font=("Arial", 12), text_color=["#475569", "#cbd5e1"]).pack(pady=(0, 8), padx=20, anchor="w")
+
+        if self.followup_records:
+            for record in self.followup_records[:4]:
+                vawc_no, client, assigned_to, follow_up_date, case_status, referred_to, remarks = record
+                date_obj = parse_date_string(follow_up_date)
+                follow_date_label = date_obj.strftime("%m/%d/%Y") if date_obj else follow_up_date or ""
+                overdue = date_obj and date_obj.date() < datetime.now().date()
+                row = ctk.CTkFrame(schedule_card, fg_color="transparent")
+                row.pack(fill="x", padx=20, pady=2)
+                ctk.CTkLabel(row, text=f"{vawc_no} — {client}", font=("Arial", 11, "bold"), text_color=["#0f172a", "#f8fafc"]).pack(side="left")
+                ctk.CTkLabel(row, text=f"{assigned_to or 'Unassigned'} | {follow_date_label}", font=("Arial", 10), text_color=["#64748b", "#cbd5e1"]).pack(side="right")
+                if overdue:
+                    ctk.CTkLabel(row, text="OVERDUE", font=("Arial", 10, "bold"), text_color=["#dc2626", "#fecaca"]).pack(side="right", padx=(0, 10))
+        else:
+            ctk.CTkLabel(schedule_card, text="No scheduled follow-ups found.", font=("Arial", 11, "italic"), text_color=["#64748b", "#94a3b8"]).pack(pady=10, padx=20, anchor="w")
 
         # 2. ADVANCED ANALYTICS (3 cards)
         analytics_frame = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
@@ -418,6 +443,15 @@ class DashboardFrame(ctk.CTkFrame):
 
             cursor.execute("SELECT address, COUNT(*) FROM vawc_logs WHERE is_deleted = 0 GROUP BY address")
             self.location_counts = {row[0]: row[1] for row in cursor.fetchall() if row[0]}
+
+            cursor.execute("SELECT vawc_no, client_name, assigned_to, follow_up_date, case_status, referred_to, remarks FROM vawc_logs WHERE is_deleted = 0 AND follow_up_date IS NOT NULL AND follow_up_date != '' ORDER BY follow_up_date ASC")
+            self.followup_records = cursor.fetchall()
+            today = datetime.now().date()
+            self.overdue_count = 0
+            for row in self.followup_records:
+                follow_date_obj = parse_date_string(row[3])
+                if follow_date_obj and follow_date_obj.date() < today:
+                    self.overdue_count += 1
 
             # Age Demographics
             cursor.execute("SELECT age FROM vawc_logs WHERE is_deleted = 0")

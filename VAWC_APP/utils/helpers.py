@@ -68,6 +68,9 @@ def parse_date_string(date_str):
     except Exception:
         return None
 
+# Backwards compatible alias used by export utilities
+parse_date = parse_date_string
+
 def load_config():
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
     default_config = {

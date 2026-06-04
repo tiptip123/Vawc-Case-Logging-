@@ -370,3 +370,106 @@ def export_filtered_pdf(search_term="", filter_abuse="", filter_status="", filte
     finally:
         if connection:
             connection.close()
+
+def export_followup_schedule_pdf(search_term="", filter_abuse="", filter_status="", filter_year="", filter_month=""):
+    from utils.helpers import load_config
+    config = load_config()
+
+    filename = "VAWC_Follow-up_Schedule.pdf"
+    path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=filename, filetypes=[("PDF files", "*.pdf")])
+    if not path:
+        return
+
+    connection = None
+    try:
+        doc = SimpleDocTemplate(path, pagesize=letter, leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN, topMargin=PAGE_MARGIN, bottomMargin=PAGE_MARGIN)
+        styles = getSampleStyleSheet()
+        table_header_style = ParagraphStyle('TableHeader', parent=styles['Heading6'], fontName='Helvetica-Bold', fontSize=8, leading=10)
+        table_body_style = ParagraphStyle('TableBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=8, leading=10)
+
+        elements = []
+        elements.append(Paragraph("REPUBLIC OF THE PHILIPPINES", styles['Normal']))
+        elements.append(Paragraph(f"PROVINCE OF {config['province'].upper()}", styles['Normal']))
+        elements.append(Paragraph(f"MUNICIPALITY OF {config['municipality'].upper()}", styles['Normal']))
+        elements.append(Paragraph(config['lgu_name'].upper(), styles['Normal']))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph("VAWC Case Logging System - Follow-up Schedule", styles['Title']))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%m/%d/%Y %I:%M %p')}", styles['Normal']))
+        elements.append(Spacer(1, 12))
+
+        connection = get_connection()
+        cursor = connection.cursor()
+        query = "SELECT vawc_no, client_name, assigned_to, follow_up_date, case_status, referred_to, remarks FROM vawc_logs WHERE is_deleted = 0 AND follow_up_date IS NOT NULL AND follow_up_date != ''"
+        params = []
+
+        if search_term:
+            query += " AND (client_name LIKE ? OR vawc_no LIKE ? OR name_of_respondent LIKE ?)"
+            term = f"%{search_term}%"
+            params.extend([term, term, term])
+        if filter_abuse and filter_abuse != "Type of Abuse":
+            query += " AND type_of_abuse LIKE ?"
+            params.append(f"%{filter_abuse}%")
+        if filter_status and filter_status != "Status":
+            query += " AND case_status = ?"
+            params.append(filter_status)
+        if filter_year and filter_year != "Year":
+            query += " AND strftime('%Y', date) = ?"
+            params.append(filter_year)
+        if filter_month and filter_month != "Month":
+            query += " AND strftime('%m', date) = ?"
+            params.append(filter_month)
+
+        query += " ORDER BY follow_up_date ASC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        raw_data = [["VAWC No", "Client Name", "Assigned To", "Follow-up Date", "Case Status", "Referred To", "Notes"]]
+        for row in rows:
+            follow_date_str = ""
+            try:
+                if row[3]:
+                    follow_date = parse_date(row[3])
+                    if follow_date:
+                        follow_date_str = follow_date.strftime("%m/%d/%Y")
+            except Exception:
+                follow_date_str = row[3] or ""
+
+            raw_data.append([
+                row[0],
+                row[1],
+                row[2] or "",
+                follow_date_str,
+                row[4] or "",
+                row[5] or "",
+                row[6] or ""
+            ])
+
+        table_data = [[Paragraph(_escape_text(cell), table_header_style) for cell in raw_data[0]]]
+        for row in raw_data[1:]:
+            table_data.append([Paragraph(_escape_text(cell), table_body_style) for cell in row])
+
+        col_widths = _get_table_col_widths(raw_data, font_name='Helvetica', font_size=8)
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1a2a4a")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('WORDWRAP', (0, 0), (-1, -1), 'CJK')
+        ]))
+        elements.append(table)
+        doc.build(elements)
+    except Exception as e:
+        from tkinter import messagebox
+        messagebox.showerror("Export Error", f"Failed to export follow-up schedule: {str(e)}")
+    finally:
+        if connection:
+            connection.close()

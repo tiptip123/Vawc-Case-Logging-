@@ -112,3 +112,100 @@ def export_to_excel(search_term="", filter_abuse="", filter_status="", filter_ye
     finally:
         if connection:
             connection.close()
+
+
+def export_followup_schedule_to_excel(search_term="", filter_abuse="", filter_status="", filter_year="", filter_month=""):
+    config = load_config()
+    filename = "VAWC_Follow-up_Schedule.xlsx"
+    path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile=filename, filetypes=[("Excel files", "*.xlsx")])
+    if not path:
+        return
+
+    connection = None
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Follow-up Schedule"
+
+        # Add title
+        ws.cell(row=1, column=1).value = f"REPUBLIC OF THE PHILIPPINES - {config['lgu_name'].upper()} - FOLLOW-UP SCHEDULE"
+        ws.cell(row=1, column=1).font = Font(bold=True, size=14)
+
+        headers = ["VAWC No", "Client Name", "Assigned To", "Follow-up Date", "Case Status", "Referred To", "Notes"]
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=2, column=col_num)
+            cell.value = header
+            cell.font = Font(bold=True)
+            cell.fill = openpyxl.styles.PatternFill(start_color="1a2a4a", end_color="1a2a4a", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF")
+
+        connection = get_connection()
+        cursor = connection.cursor()
+        query = "SELECT vawc_no, client_name, assigned_to, follow_up_date, case_status, referred_to, remarks FROM vawc_logs WHERE is_deleted = 0 AND follow_up_date IS NOT NULL AND follow_up_date != ''"
+        params = []
+
+        if search_term:
+            query += " AND (client_name LIKE ? OR vawc_no LIKE ? OR name_of_respondent LIKE ?)"
+            term = f"%{search_term}%"
+            params.extend([term, term, term])
+        if filter_abuse and filter_abuse != "Type of Abuse":
+            query += " AND type_of_abuse LIKE ?"
+            params.append(f"%{filter_abuse}%")
+        if filter_status and filter_status != "Status":
+            query += " AND case_status = ?"
+            params.append(filter_status)
+        if filter_year and filter_year != "Year":
+            query += " AND strftime('%Y', date) = ?"
+            params.append(filter_year)
+        if filter_month and filter_month != "Month":
+            query += " AND strftime('%m', date) = ?"
+            params.append(filter_month)
+
+        query += " ORDER BY follow_up_date ASC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        for row_num, row in enumerate(rows, 3):
+            follow_up_value = ""
+            try:
+                if row[3]:
+                    parsed_date = parse_date(row[3])
+                    if parsed_date:
+                        follow_up_value = parsed_date.strftime("%m/%d/%Y")
+            except Exception:
+                follow_up_value = row[3] or ""
+
+            row_values = [
+                row[0],
+                row[1],
+                row[2] or "",
+                follow_up_value,
+                row[4] or "",
+                row[5] or "",
+                row[6] or ""
+            ]
+
+            for col_num, cell_value in enumerate(row_values, 1):
+                ws.cell(row=row_num, column=col_num).value = str(cell_value) if cell_value else ""
+
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        wb.save(path)
+        from tkinter import messagebox
+        messagebox.showinfo("Success", "Follow-up schedule export completed successfully.")
+    except Exception as e:
+        from tkinter import messagebox
+        messagebox.showerror("Export Error", f"Failed to export follow-up schedule: {str(e)}")
+    finally:
+        if connection:
+            connection.close()
